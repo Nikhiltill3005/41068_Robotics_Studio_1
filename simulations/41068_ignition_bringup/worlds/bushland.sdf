@@ -19,7 +19,6 @@
 
     <!-- Physics and environment settings -->
     <gravity>0 0 -9.81</gravity>
-    <magnetic_field>6e-06 2.3e-05 -4.2e-05</magnetic_field>
     <atmosphere type="adiabatic"/>
     <physics name="default_physics" type="ignored">
       <max_step_size>0.01</max_step_size>
@@ -29,9 +28,9 @@
     
     <!-- Scene settings -->
     <scene>
-      <ambient>0.3 0.3 0.3 1</ambient>
+      <ambient>0.95 0.95 0.8 1</ambient>
       <background>0.6 0.7 0.9 1</background>
-      <shadows>1</shadows>
+      <shadows>0</shadows>
       <grid>0</grid>
     </scene>
 
@@ -321,8 +320,8 @@
       <static>true</static>
     </include>
     <include>
-      <uri>model://pine_tree</uri>
-      <name>pine_cluster_1_tree_1</name>
+      <uri>model://fire</uri>
+      <name>test_fire</name>
       <pose>11.39 5.15 0 0 0.05 1.91</pose>
       
       <static>true</static>
