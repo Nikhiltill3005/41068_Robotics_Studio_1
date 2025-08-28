@@ -99,3 +99,17 @@
   ros_type_name: 'geometry_msgs/msg/PoseStamped'
   gz_type_name: 'ignition.msgs.Pose'
   direction: GZ_TO_ROS
+
+# Drone RGB Camera (downward facing)
+- ros_topic_name: '/drone/rgb_camera/image'
+  gz_topic_name: '/model/firefighting_drone/rgb_camera/image'
+  ros_type_name: 'sensor_msgs/msg/Image'
+  gz_type_name: 'ignition.msgs.Image'
+  direction: GZ_TO_ROS
+
+# Drone Thermal/IR Camera (downward facing)
+- ros_topic_name: '/drone/thermal_camera/image'
+  gz_topic_name: '/model/firefighting_drone/thermal_camera/image'
+  ros_type_name: 'sensor_msgs/msg/Image'
+  gz_type_name: 'ignition.msgs.Image'
+  direction: GZ_TO_ROS

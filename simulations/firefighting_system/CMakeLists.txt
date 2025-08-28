@@ -70,6 +70,8 @@ install(PROGRAMS
   src/drone_teleop_control.py
   src/drone_teleop_ros.py
   src/drone_teleop_ignition.py
+  src/drone_camera_viewer.py
+  src/drone_camera_simple.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

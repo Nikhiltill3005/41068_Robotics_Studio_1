@@ -1,6 +1,6 @@
-# 🔥 Firefighting Robot System
+# 🔥🚁 Firefighting Robot System with Drone
 
-A ROS2-based firefighting robot system using the Husky UGV platform with Ignition Gazebo simulation. This project implements a complete autonomous firefighting solution with four specialized nodes working collaboratively.
+A complete ROS2-based firefighting robot system featuring both ground (Husky UGV) and aerial (Drone) platforms with Ignition Gazebo simulation and RViz visualization. This project implements a comprehensive firefighting solution with specialized nodes for teleoperation, movement, mapping, and autonomous navigation, plus an integrated firefighting drone with dual camera systems.
 
 [![ROS2 Humble](https://img.shields.io/badge/ROS2-Humble-blue.svg)](https://docs.ros.org/en/humble/)
 [![Ignition Gazebo](https://img.shields.io/badge/Simulator-Ignition%20Gazebo%20Fortress-orange.svg)](https://gazebosim.org/)
@@ -8,13 +8,20 @@ A ROS2-based firefighting robot system using the Husky UGV platform with Ignitio
 
 ## 🎯 Project Overview
 
-This system implements a complete firefighting robot solution with four main nodes working together:
+This system implements a complete firefighting robot solution with ground and aerial platforms:
 
+### 🤖 **Ground Platform (Husky UGV)**
 - **🔥 Teleop Control Node** - Manual control interface and command processing
 - **🤖 UGV Movement Node** - Robot movement execution and kinematics
 - **🗺️ Environment Mapping Node** - Environment mapping and fire detection
 - **🧭 Autonomous Navigation Node** - Path planning and autonomous navigation
 
+### 🚁 **Aerial Platform (Firefighting Drone)**
+- **📷 RGB Camera** - High-resolution visual surveillance (640x480@30fps)
+- **🔥 Thermal Camera** - Heat detection and fire identification (320x240@10fps)
+- **🎮 Multiple Teleop Options** - ROS2 Twist, Direct Ignition, Individual thrust control
+- **📡 Full ROS Integration** - Pose, odometry, IMU, camera feeds
+- **📺 RViz Visualization** - Real-time camera feeds and flight path tracking
 
 ## 🏗️ System Architecture
 
@@ -33,8 +40,9 @@ This system implements a complete firefighting robot solution with four main nod
          │
          ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                    Husky Robot Platform                        │
-│                    (Ignition Gazebo)                          │
+│                    Integrated Simulation                       │
+│        Husky Robot + Firefighting Drone (Ignition Gazebo)     │
+│           📷 RGB Camera  🔥 Thermal Camera  📺 RViz           │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -65,6 +73,10 @@ sudo apt install ros-humble-robot-localization
 sudo apt install ros-humble-ros-ign ros-humble-ros-ign-interfaces
 sudo apt install ros-humble-turtlebot4-simulator ros-humble-irobot-create-nodes
 sudo apt install ros-humble-teleop-twist-keyboard
+sudo apt install ros-humble-rviz2 ros-humble-rqt-image-view
+
+# Camera and image processing (for drone cameras)
+sudo apt install ros-humble-cv-bridge ros-humble-image-transport
 
 # Install development tools
 sudo apt install ros-dev-tools
@@ -79,12 +91,10 @@ sudo apt install ros-dev-tools
 cd ~/ros2_ws/src
 
 # Clone this repository
-git clone https://github.com/your-username/firefighting-robot-system.git
+git clone https://github.com/your-username/41068_Robotics_Studio_1.git
 ```
 
-
-
-### 3. Build the Package
+### 2. Build the Package
 
 ```bash
 # Navigate to workspace root
@@ -103,318 +113,574 @@ source install/setup.bash
 # Check if package is available
 ros2 pkg list | grep firefighting
 
-# List available nodes
-ros2 run firefighting_system --help
+# List available launch files
+ros2 launch firefighting_system --help
 ```
 
-## 🎮 Usage
+## 🎮 Usage - Quick Start
 
-### Launch the Complete System
+### 🚁📺 **Complete System with RViz (Recommended)**
 
+**🎯 Method 1: Using wrapper script (recommended for model path issues)**
 ```bash
-# Basic launch with default settings
-ros2 launch firefighting_system firefighting_system.launch.py
+# Navigate to firefighting_system directory
+cd ~/ros2_ws/src/41068_Robotics_Studio_1/simulations/firefighting_system
 
-# Launch with custom parameters
-ros2 launch firefighting_system firefighting_system.launch.py \
-  world:=large_demo \
-  use_slam:=true \
-  use_nav2:=true \
-  use_rviz:=true
+# Basic launch with RViz
+./launch_drone_rviz.sh
 
+# Launch with automatic teleop controls
+./launch_drone_rviz.sh use_teleop:=true
 
+# Launch with specific world
+./launch_drone_rviz.sh world:=large_demo
+
+# Combined options
+./launch_drone_rviz.sh world:=large_demo use_teleop:=true
 ```
 
-### Launch Individual Nodes
-
+**🎯 Method 2: Direct ROS2 launch (if environment is pre-configured)**
 ```bash
-# Teleop control only
-ros2 run firefighting_system teleop_control_node
+# First set environment variables manually
+export IGN_GAZEBO_RESOURCE_PATH="~/ros2_ws/src/41068_Robotics_Studio_1/simulations/firefighting_system/models:~/ros2_ws/src/41068_Robotics_Studio_1/simulations/41068_ignition_bringup/models:$IGN_GAZEBO_RESOURCE_PATH"
+export GZ_SIM_RESOURCE_PATH="~/ros2_ws/src/41068_Robotics_Studio_1/simulations/firefighting_system/models:~/ros2_ws/src/41068_Robotics_Studio_1/simulations/41068_ignition_bringup/models:$GZ_SIM_RESOURCE_PATH"
 
-# UGV movement only
-ros2 run firefighting_system ugv_movement_node
-
-# Environment mapping only
-ros2 run firefighting_system environment_mapping_node
-
-# Autonomous navigation only
-ros2 run firefighting_system autonomous_navigation_node
-
-
+# Then launch
+ros2 launch firefighting_system drone_with_rviz.launch.py
+ros2 launch firefighting_system drone_with_rviz.launch.py use_teleop:=true
+ros2 launch firefighting_system drone_with_rviz.launch.py world:=large_demo
 ```
 
-### Control Interface
-
-#### Keyboard Controls (WASD)
-- **W/S** - Increase/Decrease speed
-- **A/D** - Turn left/right
-- **Q/E** - Fine steering control
-- **Space** - Stop robot
-
-#### External Commands
-Send commands via the `/teleop_commands` topic:
+### 🎮 **Manual Control Setup**
 ```bash
-ros2 topic pub /teleop_commands std_msgs/msg/String "data: 'w'"
+# Start simulation first
+ros2 launch firefighting_system drone_with_rviz.launch.py
+
+# Then in separate terminals:
+# Husky control
+ros2 run teleop_twist_keyboard teleop_twist_keyboard --ros-args --remap cmd_vel:=/husky_velocity_controller/cmd_vel_unstamped
+
+# Drone control  
+ros2 run firefighting_system drone_teleop_ros.py
 ```
+
+### 📺 **RViz Only (for running simulation)**
+```bash
+# If simulation is already running
+ros2 launch firefighting_system rviz_only.launch.py
+```
+
+### 🎮 **Teleop Controls Only**
+```bash
+# Launch both control terminals
+ros2 launch firefighting_system teleop_controls.launch.py
+
+# Launch only drone control
+ros2 launch firefighting_system teleop_controls.launch.py drone_only:=true
+
+# Launch only husky control
+ros2 launch firefighting_system teleop_controls.launch.py husky_only:=true
+```
+
+## 📋 Launch File Options
+
+### `drone_with_rviz.launch.py`
+**Complete simulation launcher with RViz**
+
+**Arguments:**
+- `world` (default: `simple_trees`): World to load (`simple_trees` or `large_demo`)
+- `use_rviz` (default: `true`): Whether to launch RViz
+- `use_teleop` (default: `false`): Whether to auto-launch teleop terminals
+
+**Examples:**
+```bash
+# Default: simple_trees world with RViz
+ros2 launch firefighting_system drone_with_rviz.launch.py
+
+# Large demo world
+ros2 launch firefighting_system drone_with_rviz.launch.py world:=large_demo
+
+# Without RViz (simulation only)
+ros2 launch firefighting_system drone_with_rviz.launch.py use_rviz:=false
+
+# With automatic teleop terminals
+ros2 launch firefighting_system drone_with_rviz.launch.py use_teleop:=true
+
+# Combined options
+ros2 launch firefighting_system drone_with_rviz.launch.py world:=large_demo use_teleop:=true
+```
+
+### `rviz_only.launch.py`
+**RViz visualization only**
+
+**Arguments:**
+- `rviz_config` (default: `drone_rviz.rviz`): RViz configuration file
+
+### `teleop_controls.launch.py`
+**Teleop control terminals**
+
+**Arguments:**
+- `drone_only` (default: `false`): Launch only drone teleop
+- `husky_only` (default: `false`): Launch only husky teleop
+
+## 🛠️ Individual ROS2 Run Commands
+
+### **Camera Monitoring**
+```bash
+# Simple camera status monitor (no OpenCV needed)
+ros2 run firefighting_system drone_camera_simple.py
+
+# Visual camera viewer (if NumPy issues fixed)
+ros2 run firefighting_system drone_camera_viewer.py
+```
+
+### **Robot Control**
+```bash
+# Husky teleop control
+ros2 run teleop_twist_keyboard teleop_twist_keyboard --ros-args --remap cmd_vel:=/husky_velocity_controller/cmd_vel_unstamped
+
+# Drone teleop control (ROS2 topics)
+ros2 run firefighting_system drone_teleop_ros.py
+
+# Drone teleop control (direct Ignition)
+ros2 run firefighting_system drone_teleop_ignition.py
+
+# Alternative drone control (individual thrusters)
+ros2 run firefighting_system drone_teleop_control.py
+```
+
+### **Visualization Tools**
+```bash
+# RViz with drone configuration
+rviz2 -d ~/ros2_ws/install/firefighting_system/share/firefighting_system/config/drone_rviz.rviz
+
+# Image viewer for RGB camera
+ros2 run rqt_image_view rqt_image_view /drone/rgb_camera/image
+
+# Image viewer for thermal camera
+ros2 run rqt_image_view rqt_image_view /drone/thermal_camera/image
+```
+
+## 🔍 Diagnostic Commands
+
+### **Topic Information**
+```bash
+# List all available topics
+ros2 topic list
+
+# Check camera topics
+ros2 topic list | grep camera
+
+# Check drone topics
+ros2 topic list | grep drone
+
+# Check Husky topics
+ros2 topic list | grep husky
+```
+
+### **Topic Monitoring**
+```bash
+# Monitor RGB camera feed
+ros2 topic echo /drone/rgb_camera/image --max-count 1
+
+# Monitor thermal camera feed
+ros2 topic echo /drone/thermal_camera/image --max-count 1
+
+# Check camera frame rates
+ros2 topic hz /drone/rgb_camera/image
+ros2 topic hz /drone/thermal_camera/image
+
+# Monitor drone pose
+ros2 topic echo /drone/pose
+
+# Monitor drone commands
+ros2 topic echo /drone/cmd_vel
+```
+
+### **Node Information**
+```bash
+# List running nodes
+ros2 node list
+
+# Check if bridge is running
+ros2 node list | grep bridge
+
+# Check if Gazebo is running
+ros2 node list | grep gazebo
+
+# Node details
+ros2 node info /rviz2
+```
+
+## 📺 RViz Interface Guide
+
+### 🎯 Camera View Setup
+
+When RViz launches, you'll see:
+
+1. **📷 RGB Camera Panel**: 
+   - Topic: `/drone/rgb_camera/image`
+   - Format: RGB8 (color)
+   - Resolution: 640x480 @ ~30fps
+   - Use: Navigation, visual inspection
+
+2. **🔥 Thermal Camera Panel**:
+   - Topic: `/drone/thermal_camera/image` 
+   - Format: MONO8 (grayscale processed as thermal)
+   - Resolution: 320x240 @ ~10fps
+   - Use: Heat detection, fire identification
+
+### 🎮 3D View Controls
+
+- **🔄 Rotate**: Left mouse drag
+- **📏 Zoom**: Mouse wheel or right mouse drag
+- **🔄 Pan**: Middle mouse drag or Shift + left mouse drag
+- **🎯 Focus**: Click on object then use 'F' key
+
+### 📊 Display Panel Controls
+
+- **✅ Enable/Disable**: Check/uncheck display items
+- **🎨 Color Settings**: Click color boxes to change visualization colors
+- **📐 Scale**: Adjust size of arrows, markers, etc.
+- **🔧 Topic**: Change which topics to visualize
+
+### RViz Display Features
+
+- **📷 RGB Camera Panel**: Live drone camera feed
+- **🔥 Thermal Camera Panel**: Heat detection visualization
+- **🎯 Drone Pose**: Real-time position/orientation
+- **📈 Drone Path**: Flight trail visualization
+- **🤖 Husky Model**: 3D robot visualization
+- **🔍 Laser Scan**: LiDAR point cloud
+- **📡 TF Frames**: Coordinate systems
+
+## 🎯 Typical Workflow
+
+### **1. Start Complete System**
+```bash
+# Terminal 1: Launch everything
+./launch_drone_rviz.sh use_teleop:=true
+```
+
+### **2. Manual Control Setup**
+```bash
+# Terminal 1: Main simulation
+./launch_drone_rviz.sh
+
+# Terminal 2: Husky control
+ros2 run teleop_twist_keyboard teleop_twist_keyboard --ros-args --remap cmd_vel:=/husky_velocity_controller/cmd_vel_unstamped
+
+# Terminal 3: Drone control
+ros2 run firefighting_system drone_teleop_ros.py
+
+# Terminal 4: Camera monitoring (optional)
+ros2 run firefighting_system drone_camera_simple.py
+```
+
+### **3. Add RViz to Running Simulation**
+```bash
+# If simulation is already running without RViz
+ros2 launch firefighting_system rviz_only.launch.py
+```
+
+## 🚁 Drone System Details
+
+### 📷 **Camera Specifications**
+
+#### RGB Camera
+- **Field of View**: 60° (1.047 radians)
+- **Format**: RGB8 (24-bit color)
+- **Noise**: Gaussian (mean=0, stddev=0.01)
+- **Orientation**: Downward-facing for ground surveillance
+
+#### Thermal Camera  
+- **Field of View**: 60° (1.047 radians)
+- **Format**: MONO8 (8-bit grayscale, thermal-processed)
+- **Noise**: Gaussian (mean=0, stddev=0.005)
+- **Visualization**: Heat-map coloring in viewer
+- **Orientation**: Downward-facing for fire detection
+
+### 🎮 **Control Options**
+
+#### ROS2 Twist Control (Recommended)
+```bash
+ros2 run firefighting_system drone_teleop_ros.py
+```
+- Uses standard `geometry_msgs/Twist` messages
+- Compatible with ROS2 ecosystem
+- Integrates with navigation stack
+
+#### Direct Ignition Control
+```bash
+ros2 run firefighting_system drone_teleop_ignition.py
+```
+- Direct communication with Ignition Gazebo
+- Lower latency control
+- Bypass ROS2 bridge
+
+#### Individual Thrust Control
+```bash
+ros2 run firefighting_system drone_teleop_control.py
+```
+- Direct rotor thrust control
+- Fine-grained flight control
+- Advanced flight maneuvers
+
+### 📡 **Drone Topics**
+
+#### Published Topics
+| Topic | Message Type | Description |
+|-------|--------------|-------------|
+| `/drone/odometry` | `nav_msgs/Odometry` | Drone position and velocity |
+| `/drone/pose` | `geometry_msgs/PoseStamped` | Drone pose |
+| `/drone/imu` | `sensor_msgs/Imu` | IMU data |
+| `/drone/rgb_camera/image` | `sensor_msgs/Image` | RGB camera feed |
+| `/drone/thermal_camera/image` | `sensor_msgs/Image` | Thermal camera feed |
+
+#### Subscribed Topics
+| Topic | Message Type | Description |
+|-------|--------------|-------------|
+| `/drone/cmd_vel` | `geometry_msgs/Twist` | Velocity commands |
 
 ## 🔧 Configuration
 
-### Node Parameters
+### 📄 **Configuration Files**
+
+#### Drone RViz Configuration
+- **File**: `config/drone_rviz.rviz`
+- **Purpose**: Pre-configured RViz layout for drone visualization
+- **Features**: Camera feeds, pose display, flight path tracking
+
+#### Camera Configuration
+- **RGB Camera**: 640x480 resolution, 30fps, RGB8 format
+- **Thermal Camera**: 320x240 resolution, 10fps, MONO8 format
+- **Both cameras**: Downward-facing, 60° FOV
+
+#### Bridge Configuration
+- **File**: `config/gazebo_bridge_with_drone.yaml` (in 41068_ignition_bringup)
+- **Purpose**: ROS-Ignition topic bridging for both Husky and Drone
+
+### 🎛️ **Node Parameters**
 
 Each node can be configured via ROS2 parameters:
 
 ```bash
-# View current parameters
-ros2 param list
+# View drone-related parameters
+ros2 param list | grep drone
 
-# Set parameters
-ros2 param set /teleop_control_node max_speed 3.0
-ros2 param set /ugv_movement_node wheelbase 0.6
+# Set drone parameters
+ros2 param set /drone_teleop_node max_velocity 5.0
 ```
 
-### Configuration File
+## 🛠️ NumPy Compatibility Fix
 
-Edit `config/firefighting_config.yaml` to modify default parameters:
+If you encounter NumPy issues with the camera viewer:
 
-```yaml
-firefighting_system:
-  ros__parameters:
-    teleop_control_node:
-      max_steering_angle: 0.5
-      max_speed: 2.0
-      steering_sensitivity: 0.1
-      speed_sensitivity: 0.5
-    
-    ugv_movement_node:
-      wheelbase: 0.5
-      max_steering_angle: 0.5
-      max_speed: 2.0
-    
-    environment_mapping_node:
-      map_resolution: 0.05
-      map_width: 1000
-      map_height: 1000
-      map_origin_x: -25.0
-      map_origin_y: -25.0
-    
-    autonomous_navigation_node:
-      goal_tolerance: 0.1
-      max_linear_velocity: 1.0
-      max_angular_velocity: 1.0
-      path_following_gain: 1.0
+### **Quick Solution: Use Simple Monitor**
+```bash
+ros2 run firefighting_system drone_camera_simple.py
 ```
 
-## 📡 Topics and Communication
+### **Fix NumPy Issue**
+```bash
+# Method 1: Downgrade NumPy
+pip install "numpy<2.0"
 
-### Published Topics
+# Method 2: Use system packages
+sudo apt remove python3-numpy
+sudo apt install python3-numpy
 
-| Topic | Message Type | Description |
-|-------|--------------|-------------|
-| `/cmd_ackermann` | `ackermann_msgs/AckermannDrive` | Ackermann drive commands |
-| `/cmd_vel` | `geometry_msgs/Twist` | Twist velocity commands |
-| `/odom` | `nav_msgs/Odometry` | Robot odometry |
-| `/map` | `nav_msgs/OccupancyGrid` | Occupancy grid map |
+# Method 3: Virtual environment
+python3 -m venv ~/camera_env
+source ~/camera_env/bin/activate
+pip install "numpy<2.0" opencv-python
+```
 
-| `/planned_path` | `geometry_msgs/PoseStamped` | Current navigation waypoint |
+### **Alternative: Use ROS2 Image Tools**
+```bash
+# View RGB camera
+ros2 run rqt_image_view rqt_image_view /drone/rgb_camera/image
 
-### Subscribed Topics
-
-| Topic | Message Type | Description |
-|-------|--------------|-------------|
-| `/teleop_commands` | `std_msgs/String` | Teleop control commands |
-| `/scan` | `sensor_msgs/LaserScan` | Laser scan data |
-| `/odom` | `nav_msgs/Odometry` | Robot odometry |
-| `/map` | `nav_msgs/OccupancyGrid` | Occupancy grid map |
-| `/goal_pose` | `geometry_msgs/PoseStamped` | Navigation goals |
+# View thermal camera
+ros2 run rqt_image_view rqt_image_view /drone/thermal_camera/image
+```
 
 ## 🧪 Testing
 
-### Simulation Testing
-
-1. **Launch with Ignition Gazebo**:
-   ```bash
-   ros2 launch firefighting_system firefighting_system.launch.py
-   ```
-
-2. **Test each node individually**:
-   ```bash
-   # Test teleop control
-   ros2 run teleop_twist_keyboard teleop_twist_keyboard
-   
-   # Test movement
-   ros2 topic pub /cmd_vel geometry_msgs/msg/Twist "{linear: {x: 1.0}, angular: {z: 0.0}}"
-   ```
-
-3. **Verify topic communication**:
-   ```bash
-   # List active topics
-   ros2 topic list
-   
-   # Monitor specific topics
-   ros2 topic echo /odom
-   ros2 topic echo /map
-   ```
-
-### Unit Testing
-
+### **Camera System Test**
 ```bash
-# Build with testing enabled
-colcon build --cmake-args -DBUILD_TESTING=ON
+# Check available camera topics
+ros2 topic list | grep camera
 
-# Run tests
-colcon test --packages-select firefighting_system
+# Test RGB camera data
+ros2 topic echo /drone/rgb_camera/image --max-count 1
 
-# View test results
-colcon test-result --verbose
+# Test thermal camera data  
+ros2 topic echo /drone/thermal_camera/image --max-count 1
+
+# Check frame rates
+ros2 topic hz /drone/rgb_camera/image
+ros2 topic hz /drone/thermal_camera/image
 ```
 
-## 🛠️ Development
+### **Flight Test Patterns**
 
-### Project Structure
+#### Basic Camera Test
+1. Start simulation with RViz
+2. Take off drone (use teleop controls)
+3. Hover at ~5m altitude
+4. Observe camera feeds in RViz
+5. Move drone over different terrain
+6. Check thermal vs RGB differences
 
-```
-firefighting_system/
-├── include/                          # Header files
-│   ├── teleop_control_node.hpp      # Teleop control interface
-│   ├── ugv_movement_node.hpp        # UGV movement and kinematics
-│   ├── environment_mapping_node.hpp  # Environment mapping
-│   └── autonomous_navigation_node.hpp # Autonomous navigation and path planning
-├── src/                             # Source files
-│   ├── teleop_control_node.cpp      # Manual control implementation
-│   ├── ugv_movement_node.cpp        # Movement execution
-│   ├── environment_mapping_node.cpp  # Mapping
-│   └── autonomous_navigation_node.cpp # Navigation implementation
-├── launch/                          # Launch files
-│   └── firefighting_system.launch.py # Complete system launch
-├── config/                          # Configuration files
-│   └── firefighting_config.yaml     # Node parameters
-├── package.xml                      # Package dependencies
-├── CMakeLists.txt                   # Build configuration
-└── README.md                        # This file
-```
+#### Path Following Test
+1. Enable "Drone Path" display in RViz
+2. Fly drone in patterns (circles, figure-8)
+3. Observe path trail visualization
+4. Use path data for flight analysis
 
-### Adding New Features
+### **Simulation Testing**
 
-1. **Create header file** in `include/`
-2. **Implement source file** in `src/`
-3. **Update CMakeLists.txt** to build new node
-4. **Add to launch file** if needed
-5. **Test and document**
+1. **Launch with RViz**:
+   ```bash
+   ./launch_drone_rviz.sh use_teleop:=true
+   ```
 
-### Code Style Guidelines
+2. **Test each control method**:
+   ```bash
+   # Test ROS2 twist control
+   ros2 run firefighting_system drone_teleop_ros.py
+   
+   # Test direct Ignition control
+   ros2 run firefighting_system drone_teleop_ignition.py
+   ```
 
-- Follow ROS2 C++ style guidelines
-- Use meaningful variable names
-- Add proper error handling
-- Include comprehensive logging
-- Document all public interfaces
+3. **Verify camera feeds**:
+   ```bash
+   # Monitor camera topics
+   ros2 topic echo /drone/rgb_camera/image --max-count 1
+   ros2 topic echo /drone/thermal_camera/image --max-count 1
+   ```
 
 ## 🐛 Troubleshooting
 
-### Common Issues
+### **Common Issues**
 
-#### Build Errors
+#### Model Not Found Error
+```
+[Err] Unable to find uri[model://firefighting_drone]
+```
+**Solution**: Use the wrapper script which sets environment variables:
 ```bash
-# Clean build directory
-rm -rf build/ install/ log/
-
-# Rebuild package
-colcon build --symlink-install --packages-select firefighting_system
+./launch_drone_rviz.sh
 ```
 
-#### TF Errors
+#### Camera Feeds Not Showing in RViz
 ```bash
-# Check TF tree
-ros2 run tf2_tools view_frames
+# Check if simulation is running
+ros2 node list | grep -E "(gazebo|bridge)"
 
-# Verify transforms are being published
-ros2 topic echo /tf
+# Verify camera topics exist
+ros2 topic list | grep camera
+
+# Check bridge is working
+ros2 node list | grep bridge
 ```
 
-#### Topic Not Found
+#### Drone Not Moving
 ```bash
-# List active topics
-ros2 topic list
+# Check if drone teleop is publishing
+ros2 topic echo /drone/cmd_vel
 
-# Check node connections
-ros2 node info /node_name
+# Verify bridge is translating commands
+ros2 topic list | grep cmd_vel
+
+# Check Ignition topics
+ign topic -l | grep firefighting_drone
 ```
 
-#### Simulation Crashes
+#### NumPy/OpenCV Issues
 ```bash
-# Restart Gazebo
-pkill gzserver
-pkill gzclient
+# Use simple camera monitor instead
+ros2 run firefighting_system drone_camera_simple.py
 
-# Clear cache
-rm -rf ~/.gazebo/
+# Or fix NumPy version
+pip install "numpy<2.0"
 ```
 
-### Debug Commands
+### **Debug Commands**
 
 ```bash
-# Check node status
+# Check all nodes
 ros2 node list
-ros2 node info /node_name
 
-# Monitor topics
-ros2 topic list
-ros2 topic echo /topic_name
+# Monitor drone topics
+ros2 topic list | grep drone
 
-# Check parameters
-ros2 param list
-ros2 param get /node_name parameter_name
+# Check topic data
+ros2 topic echo /drone/pose
+ros2 topic echo /drone/imu
+
+# Monitor camera performance  
+ros2 topic hz /drone/rgb_camera/image
+ros2 topic hz /drone/thermal_camera/image
 
 # View TF tree
 ros2 run tf2_tools view_frames
 ```
 
+## 📊 Expected Performance
+
+### **System Performance**
+- **Simulation**: Runs smoothly on modern hardware
+- **Camera Feeds**: RGB @30fps, Thermal @10fps
+- **Control Latency**: <100ms for ROS2 topics
+- **RViz Update**: Real-time camera and pose visualization
+
+### **Camera Performance**
+- **RGB Camera**: High resolution for navigation
+- **Thermal Camera**: Lower resolution optimized for heat detection
+- **Network Load**: Manageable with compression options available
+
+## 🎯 Mission Scenarios
+
+### **🔥 Firefighting Mission Example**
+1. **Ground Survey**: Use Husky to patrol and map the area
+2. **Aerial Reconnaissance**: Deploy drone for aerial surveillance
+3. **Heat Detection**: Use thermal camera to identify fire hotspots
+4. **Coordination**: Both platforms work together for comprehensive coverage
+5. **Real-time Monitoring**: RViz provides mission control interface
+
+### **🏗️ Integration Features**
+- **Dual Platform Control**: Simultaneous ground and air operations
+- **Shared World**: Both robots operate in the same simulation environment
+- **Unified Visualization**: Single RViz interface for both platforms
+- **Coordinated Mission Planning**: Complementary capabilities
+
 ## 🤝 Contributing
 
 We welcome contributions! Here's how you can help:
 
-### Development Workflow
+### **Development Areas**
+- **Ground Robot**: Husky navigation and mapping improvements
+- **Drone System**: Flight control and camera processing
+- **Integration**: Coordination between platforms
+- **Visualization**: RViz enhancements and mission interfaces
 
+### **Development Workflow**
 1. **Fork the repository**
-2. **Create a feature branch**:
-   ```bash
-   git checkout -b feature/your-feature-name
-   ```
-3. **Make your changes**
-4. **Test thoroughly**
-5. **Commit your changes**:
-   ```bash
-   git commit -m "Add feature: description of changes"
-   ```
-6. **Push to your fork**:
-   ```bash
-   git push origin feature/your-feature-name
-   ```
-7. **Submit a pull request**
+2. **Create a feature branch**
+3. **Test thoroughly with both platforms**
+4. **Submit a pull request**
 
-### Team Collaboration
+## 📚 Documentation Files
 
-This project is designed for collaborative development:
+This README consolidates information from several specialized documentation files:
 
-- **Node 1**: Teleop Control - Handle manual control and command processing
-- **Node 2**: UGV Movement - Implement robot movement and kinematics
-- **Node 3**: Environment Mapping - Develop mapping
-- **Node 4**: Autonomous Navigation - Create navigation and path planning
-
-### Code Review Guidelines
-
-- Ensure all tests pass
-- Follow coding standards
-- Add appropriate documentation
-- Include example usage
-- Update relevant documentation
-
-## 📚 Documentation
-
-- [ROS2 Documentation](https://docs.ros.org/en/humble/)
-- [Ignition Gazebo Documentation](https://gazebosim.org/docs)
-- [Husky Robot Documentation](https://husky.clearpathrobotics.com/)
-- [Navigation2 Documentation](https://navigation.ros.org/)
+- **`ROS2_COMMANDS.md`**: Complete ROS2 command reference
+- **`RVIZ_USAGE.md`**: Detailed RViz setup and usage guide
+- **`NUMPY_FIX.md`**: NumPy compatibility solutions
+- **`DRONE_INSTALLATION.md`**: Drone-specific setup instructions
 
 ## 📄 License
 
@@ -422,19 +688,18 @@ This project is licensed under the Apache 2.0 License - see the [LICENSE](LICENS
 
 ## 👥 Team
 
-This system was developed collaboratively for the **41068 Robotics Studio I** course.
+This integrated system was developed collaboratively for the **41068 Robotics Studio I** course, featuring both ground and aerial robotics platforms.
 
 ### Contributors
-
-- **Teleop Control Team** - Manual control interface
-- **UGV Movement Team** - Robot movement and kinematics
-- **Environment Mapping Team** - Mapping and fire detection
-- **Autonomous Navigation Team** - Navigation and path planning
+- **Ground Platform Team**: Husky UGV system development
+- **Aerial Platform Team**: Firefighting drone system development
+- **Integration Team**: Combined system coordination
+- **Visualization Team**: RViz and monitoring systems
 
 ## 🙏 Acknowledgments
 
 - **Clearpath Robotics** for the Husky platform
-- **Open Robotics** for Ignition Gazebo
+- **Open Robotics** for Ignition Gazebo and ROS2
 - **ROS2 Community** for the excellent framework
 - **41068 Course Staff** for guidance and support
 
@@ -443,12 +708,30 @@ This system was developed collaboratively for the **41068 Robotics Studio I** co
 If you encounter any issues or have questions:
 
 1. **Check the troubleshooting section** above
-2. **Search existing issues** on GitHub
-3. **Create a new issue** with detailed information
-4. **Contact the development team**
+2. **Review the diagnostic commands**
+3. **Search existing issues** on GitHub
+4. **Create a new issue** with detailed information
+5. **Contact the development team**
 
 ---
 
-**Happy Firefighting! 🔥🤖**
+## 🚀 **Quick Start Summary**
+
+### **🎯 Recommended Launch Sequence:**
+
+```bash
+# 1. Navigate to project directory
+cd ~/ros2_ws/src/41068_Robotics_Studio_1/simulations/firefighting_system
+
+# 2. Launch complete system with auto-teleop
+./launch_drone_rviz.sh use_teleop:=true
+
+# 3. Wait for Gazebo, RViz, and teleop windows to open
+# 4. Use WASD controls in teleop terminals
+# 5. Monitor camera feeds in RViz
+# 6. Enjoy coordinated firefighting missions! 🔥🤖🚁
+```
+
+**Happy Firefighting! 🔥🤖🚁**
 
 *Remember: Safety first! This is a simulation system for educational purposes.*
