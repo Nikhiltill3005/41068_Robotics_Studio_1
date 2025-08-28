@@ -1,11 +1,12 @@
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, ExecuteProcess
 from launch.conditions import IfCondition
 from launch.substitutions import (Command, LaunchConfiguration,
                                   PathJoinSubstitution)
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
 from launch_ros.substitutions import FindPackageShare
+import os
 
 
 def generate_launch_description():
@@ -37,6 +38,13 @@ def generate_launch_description():
         description='Flag to launch Nav2'
     )
     ld.add_action(nav2_launch_arg)
+    
+    drone_launch_arg = DeclareLaunchArgument(
+        'drone',
+        default_value='True',
+        description='Flag to spawn the firefighting drone'
+    )
+    ld.add_action(drone_launch_arg)
 
     # Load robot_description and start robot_state_publisher
     robot_description_content = ParameterValue(
@@ -73,6 +81,7 @@ def generate_launch_description():
         choices=['simple_trees', 'large_demo']
     )
     ld.add_action(world_launch_arg)
+    
     gazebo = IncludeLaunchDescription(
         PathJoinSubstitution([FindPackageShare('ros_ign_gazebo'),
                              'launch', 'ign_gazebo.launch.py']),
@@ -94,12 +103,12 @@ def generate_launch_description():
     )
     ld.add_action(robot_spawner)
 
-    # Bridge topics between gazebo and ROS2
+    # Bridge topics between gazebo and ROS2 (with drone support)
     gazebo_bridge = Node(
         package='ros_ign_bridge',
         executable='parameter_bridge',
         parameters=[{'config_file': PathJoinSubstitution([config_path,
-                                                          'gazebo_bridge.yaml']),
+                                                          'gazebo_bridge_with_drone.yaml']),
                     'use_sim_time': use_sim_time}]
     )
     ld.add_action(gazebo_bridge)

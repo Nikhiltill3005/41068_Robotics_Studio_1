@@ -60,6 +60,17 @@ install(DIRECTORY
 install(DIRECTORY src
   DESTINATION share/${PROJECT_NAME}
   FILES_MATCHING PATTERN "*.py"
+  PERMISSIONS OWNER_EXECUTE OWNER_WRITE OWNER_READ
+              GROUP_EXECUTE GROUP_READ
+              WORLD_EXECUTE WORLD_READ
+)
+
+# Install Python scripts as executables
+install(PROGRAMS
+  src/drone_teleop_control.py
+  src/drone_teleop_ros.py
+  src/drone_teleop_ignition.py
+  DESTINATION lib/${PROJECT_NAME}
 )
 
 if(BUILD_TESTING)

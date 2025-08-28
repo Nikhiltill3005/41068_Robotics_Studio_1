@@ -69,5 +69,12 @@
       <pose>5.0 0.0 0 0 0 0</pose>
     </include>
 
+    <!-- Firefighting Drone -->
+    <include>
+      <uri>model://firefighting_drone</uri>
+      <name>firefighting_drone</name>
+      <pose>3.0 -3.0 0.5 0 0 0</pose>
+    </include>
+
   </world>
 </sdf>

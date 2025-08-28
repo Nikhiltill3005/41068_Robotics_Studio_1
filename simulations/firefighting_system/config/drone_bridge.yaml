@@ -1,0 +1,61 @@
+# ROS-Ignition Bridge Configuration for Firefighting Drone
+
+# Timing consistency
+- ros_topic_name: '/clock'
+  gz_topic_name: '/clock'
+  ros_type_name: 'rosgraph_msgs/msg/Clock'
+  gz_type_name: 'gz.msgs.Clock'
+  direction: GZ_TO_ROS
+
+# Drone command velocity (for multirotor control)
+- ros_topic_name: '/drone/cmd_vel'
+  gz_topic_name: '/model/firefighting_drone/cmd_vel'
+  ros_type_name: 'geometry_msgs/msg/Twist'
+  gz_type_name: 'ignition.msgs.Twist'
+  direction: ROS_TO_GZ
+
+# Drone odometry
+- ros_topic_name: '/drone/odometry'
+  gz_topic_name: '/model/firefighting_drone/odometry'
+  ros_type_name: 'nav_msgs/msg/Odometry'
+  gz_type_name: 'ignition.msgs.Odometry'
+  direction: GZ_TO_ROS
+
+# Drone IMU
+- ros_topic_name: '/drone/imu'
+  gz_topic_name: '/model/firefighting_drone/imu'
+  ros_type_name: 'sensor_msgs/msg/Imu'
+  gz_type_name: 'ignition.msgs.IMU'
+  direction: GZ_TO_ROS
+
+# Drone pose information
+- ros_topic_name: '/drone/pose'
+  gz_topic_name: '/model/firefighting_drone/pose'
+  ros_type_name: 'geometry_msgs/msg/PoseStamped'
+  gz_type_name: 'ignition.msgs.Pose'
+  direction: GZ_TO_ROS
+
+# Individual rotor speed commands (for fine control)
+- ros_topic_name: '/drone/rotor_0/cmd_vel'
+  gz_topic_name: '/model/firefighting_drone/joint/rotor_0_joint/cmd_vel'
+  ros_type_name: 'std_msgs/msg/Float64'
+  gz_type_name: 'ignition.msgs.Double'
+  direction: ROS_TO_GZ
+
+- ros_topic_name: '/drone/rotor_1/cmd_vel'
+  gz_topic_name: '/model/firefighting_drone/joint/rotor_1_joint/cmd_vel'
+  ros_type_name: 'std_msgs/msg/Float64'
+  gz_type_name: 'ignition.msgs.Double'
+  direction: ROS_TO_GZ
+
+- ros_topic_name: '/drone/rotor_2/cmd_vel'
+  gz_topic_name: '/model/firefighting_drone/joint/rotor_2_joint/cmd_vel'
+  ros_type_name: 'std_msgs/msg/Float64'
+  gz_type_name: 'ignition.msgs.Double'
+  direction: ROS_TO_GZ
+
+- ros_topic_name: '/drone/rotor_3/cmd_vel'
+  gz_topic_name: '/model/firefighting_drone/joint/rotor_3_joint/cmd_vel'
+  ros_type_name: 'std_msgs/msg/Float64'
+  gz_type_name: 'ignition.msgs.Double'
+  direction: ROS_TO_GZ
