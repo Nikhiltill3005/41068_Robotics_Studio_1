@@ -1,0 +1,31 @@
+firefighting_system:
+  ros__parameters:
+    # Teleop Control Node Parameters
+    teleop_control_node:
+      max_steering_angle: 0.5
+      max_speed: 2.0
+      steering_sensitivity: 0.1
+      speed_sensitivity: 0.5
+    
+    # UGV Movement Node Parameters
+    ugv_movement_node:
+      wheelbase: 0.5
+      max_steering_angle: 0.5
+      max_speed: 2.0
+    
+    # Environment Mapping Node Parameters
+    environment_mapping_node:
+      map_resolution: 0.05
+      map_width: 1000
+      map_height: 1000
+      map_origin_x: -25.0
+      map_origin_y: -25.0
+    
+    # Autonomous Navigation Node Parameters
+    autonomous_navigation_node:
+      goal_tolerance: 0.1
+      max_linear_velocity: 1.0
+      max_angular_velocity: 1.0
+      path_following_gain: 1.0
+    
+
