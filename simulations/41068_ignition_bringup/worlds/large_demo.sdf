@@ -293,11 +293,6 @@
       <name>rock6</name>
       <pose>-14 -12 0 0 0 0</pose>
     </include>
-    #<include>
-    #  <uri>file:///home/sachin/ros2_ws/install/sjtu_drone_description/share/sjtu_drone_description/models/sjtu_drone</uri>
-    #  <pose>5 5 1 0 0 0</pose>
-    #  <name>sjtu_drone</name>
-    #</include>
 
   </world>
 </sdf>
