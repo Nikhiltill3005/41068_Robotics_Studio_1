@@ -1,6 +1,7 @@
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, RegisterEventHandler, Shutdown, ExecuteProcess
 from launch.conditions import IfCondition
+from launch.event_handlers import OnProcessExit, OnShutdown
 from launch.substitutions import (Command, LaunchConfiguration,
                                   PathJoinSubstitution)
 from launch_ros.actions import Node
@@ -64,6 +65,15 @@ def generate_launch_description():
                     {'use_sim_time': use_sim_time}]
     )
     ld.add_action(robot_localization_node)
+    
+    # Add event handler for robot_localization node
+    robot_localization_exit_handler = RegisterEventHandler(
+        event_handler=OnProcessExit(
+            target_action=robot_localization_node,
+            on_exit=[Shutdown()]
+        )
+    )
+    ld.add_action(robot_localization_exit_handler)
 
     # Start Gazebo to simulate the robot in the chosen world
     world_launch_arg = DeclareLaunchArgument(
@@ -103,6 +113,15 @@ def generate_launch_description():
                     'use_sim_time': use_sim_time}]
     )
     ld.add_action(gazebo_bridge)
+    
+    # Add event handler to ensure parameter_bridge terminates properly
+    gazebo_bridge_exit_handler = RegisterEventHandler(
+        event_handler=OnProcessExit(
+            target_action=gazebo_bridge,
+            on_exit=[Shutdown()]
+        )
+    )
+    ld.add_action(gazebo_bridge_exit_handler)
 
     # rviz2 visualises data
     rviz_node = Node(
@@ -127,5 +146,18 @@ def generate_launch_description():
         condition=IfCondition(LaunchConfiguration('nav2'))
     )
     ld.add_action(nav2)
+
+    # Add cleanup mechanism to kill any remaining ros_parameters processes
+    cleanup_handler = RegisterEventHandler(
+        event_handler=OnShutdown(
+            on_shutdown=[
+                ExecuteProcess(
+                    cmd=['pkill', '-f', 'ros_parameters'],
+                    output='screen'
+                )
+            ]
+        )
+    )
+    ld.add_action(cleanup_handler)
 
     return ld
