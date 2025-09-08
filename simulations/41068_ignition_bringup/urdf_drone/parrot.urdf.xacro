@@ -139,4 +139,31 @@
   </joint>
   <link name="camera_depth_optical_frame"/>
 
+  <!-- IR Camera Link -->
+<link name="ir_camera_link">
+  <visual>
+    <geometry>
+      <box size="0.05 0.05 0.03"/>
+    </geometry>
+    <material name="black"/>
+  </visual>
+  <collision>
+    <geometry>
+      <box size="0.05 0.05 0.03"/>
+    </geometry>
+  </collision>
+  <inertial>
+    <mass value="0.1"/>
+    <inertia ixx="0.001" ixy="0" ixz="0" iyy="0.001" iyz="0" izz="0.001"/>
+  </inertial>
+</link>
+
+<!-- Joint to attach camera to bottom of drone -->
+<joint name="ir_camera_joint" type="fixed">
+  <parent link="base_link"/>
+  <child link="ir_camera_link"/>
+  <origin xyz="0 0 -0.1" rpy="0 ${pi/2} 0"/>  <!-- Pointing downward -->
+</joint>
+
+
 </robot>

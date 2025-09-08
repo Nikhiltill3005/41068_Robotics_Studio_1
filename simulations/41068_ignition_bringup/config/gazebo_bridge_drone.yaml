@@ -26,4 +26,11 @@
   gz_type_name: 'ignition.msgs.Twist'
   direction: ROS_TO_GZ
 
+  #IR CAMERA
+- ros_topic_name: "ir_camera/image_raw"
+  gz_topic_name: "/model/drone/ir_camera"
+  ros_type_name: "sensor_msgs/msg/Image"
+  gz_type_name: "ignition.msgs.Image"
+  direction: GZ_TO_ROS
+
 

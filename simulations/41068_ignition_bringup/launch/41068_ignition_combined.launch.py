@@ -28,7 +28,7 @@ def generate_launch_description():
         'world',
         default_value='simple_trees',
         description='Which world to load',
-        choices=['simple_trees', 'large_demo']
+        choices=['simple_trees', 'large_demo', 'bushland']
     )
     ld.add_action(world_launch_arg)
 
@@ -135,7 +135,7 @@ def generate_launch_description():
         executable='rviz2',
         output='screen',
         parameters=[{'use_sim_time': use_sim_time}],
-        arguments=['-d', PathJoinSubstitution([pkg_path, 'config', '41068_combined.rviz'])],
+        arguments=['-d', PathJoinSubstitution([pkg_path, 'config', '41068_ignition_combined.rviz'])],
         condition=IfCondition(LaunchConfiguration('rviz'))
     )
     ld.add_action(rviz_node)

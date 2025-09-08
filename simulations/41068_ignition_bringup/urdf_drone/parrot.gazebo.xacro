@@ -173,4 +173,33 @@
     </sensor>
   </gazebo>
 
+  <!-- IR Thermal Camera -->
+  <gazebo reference="ir_camera_link">
+    <sensor name="ir_camera" type="thermal_camera">
+      <camera>
+        <horizontal_fov>1.047</horizontal_fov>
+        <image>
+          <width>1080</width>
+          <height>720</height>
+          <format>L8</format>  <!-- 8-bit grayscale for thermal -->
+        </image>
+        <clip>
+          <near>0.1</near>
+          <far>50.0</far>
+        </clip>
+      </camera>
+      <thermal_camera>
+        <temperature_range>
+          <min>250.0</min>  <!-- -23°C -->
+          <max>700.0</max>  <!-- 427°C -->
+        </temperature_range>
+      </thermal_camera>
+      <always_on>1</always_on>
+      <update_rate>15</update_rate>
+      <topic>model/drone/ir_camera</topic>
+      <gz_frame_id>ir_camera_link</gz_frame_id>
+    </sensor>
+  </gazebo>
+
+  
 </robot>
