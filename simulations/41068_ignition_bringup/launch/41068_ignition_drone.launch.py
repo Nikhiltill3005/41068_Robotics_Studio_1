@@ -99,7 +99,7 @@ def generate_launch_description():
         package='ros_ign_bridge',
         executable='parameter_bridge',
         parameters=[{'config_file': PathJoinSubstitution([config_path,
-                                                          'gazebo_bridge.yaml']),
+                                                          'gazebo_bridge_drone.yaml']),
                     'use_sim_time': use_sim_time}]
     )
     ld.add_action(gazebo_bridge)

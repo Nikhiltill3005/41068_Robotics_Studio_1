@@ -181,7 +181,7 @@
         <image>
           <width>1080</width>
           <height>720</height>
-          <format>L8</format>  <!-- 8-bit grayscale for thermal -->
+          <format>L16</format>  <!-- 8-bit grayscale for thermal -->
         </image>
         <clip>
           <near>0.1</near>
@@ -196,7 +196,7 @@
       </thermal_camera>
       <always_on>1</always_on>
       <update_rate>15</update_rate>
-      <topic>model/drone/ir_camera</topic>
+      <topic>/model/drone/ir_camera</topic>
       <gz_frame_id>ir_camera_link</gz_frame_id>
     </sensor>
   </gazebo>
