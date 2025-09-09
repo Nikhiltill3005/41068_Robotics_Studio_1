@@ -18,6 +18,9 @@
           <diffuse>1 0.5 0 0.4</diffuse>
           <emissive>1 0.2 0 0.3</emissive>
         </material>
+        <plugin filename="ignition-gazebo-thermal-system" name="ignition::gazebo::systems::Thermal">
+          <temperature>1000.0</temperature>  <!-- Very hot: 727°C -->
+        </plugin>
       </visual>
 
       <!-- Inner flame effect (smaller cylinder inside) -->
