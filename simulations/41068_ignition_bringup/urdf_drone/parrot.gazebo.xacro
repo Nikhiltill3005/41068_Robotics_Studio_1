@@ -179,9 +179,9 @@
       <camera>
         <horizontal_fov>1.047</horizontal_fov>
         <image>
-          <width>1080</width>
-          <height>720</height>
-          <format>L16</format>  <!-- 8-bit grayscale for thermal -->
+          <width>320</width>
+          <height>240</height>
+          <format>R8G8B8</format>  <!-- RGB format for thermal visualization -->
         </image>
         <clip>
           <near>0.1</near>
@@ -190,9 +190,10 @@
       </camera>
       <thermal_camera>
         <temperature_range>
-          <min>250.0</min>  <!-- -23°C -->
-          <max>700.0</max>  <!-- 427°C -->
+          <min>253.15</min>  <!-- -20°C in Kelvin -->
+          <max>773.15</max>  <!-- 500°C in Kelvin -->
         </temperature_range>
+        <temperature_linear_resolution>0.01</temperature_linear_resolution>
       </thermal_camera>
       <always_on>1</always_on>
       <update_rate>15</update_rate>

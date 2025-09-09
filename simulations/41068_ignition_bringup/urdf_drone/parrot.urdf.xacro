@@ -162,7 +162,7 @@
 <joint name="ir_camera_joint" type="fixed">
   <parent link="base_link"/>
   <child link="ir_camera_link"/>
-  <origin xyz="0 0 -0.1" rpy="0 ${pi/2} 0"/>  <!-- Pointing downward -->
+  <origin xyz="0 0 -0.1" rpy="0 0 0"/>  <!-- SDF camera looks along -Z; this points down -->
 </joint>
 
 

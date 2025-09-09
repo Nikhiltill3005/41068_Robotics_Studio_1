@@ -33,4 +33,11 @@
   gz_type_name: "ignition.msgs.Image"
   direction: GZ_TO_ROS
 
+  #IR CAMERA INFO
+- ros_topic_name: "ir_camera/camera_info"
+  gz_topic_name: "/model/drone/ir_camera/camera_info"
+  ros_type_name: "sensor_msgs/msg/CameraInfo"
+  gz_type_name: "ignition.msgs.CameraInfo"
+  direction: GZ_TO_ROS
+
 

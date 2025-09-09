@@ -2,11 +2,7 @@
 <sdf version='1.8'>
   <world name="simple_trees">
     <plugin filename="libignition-gazebo-thermal-system.so" name="ignition::gazebo::systems::Thermal">
-      <temperature>
-        <uniform>
-          <temperature>288.0</temperature> <!-- Ambient temperature -->
-        </uniform>
-      </temperature>
+      <temperature>293.15</temperature>
     </plugin>
     <!-- Basic world setup  -->
     <plugin name='ignition::gazebo::systems::Physics' filename='ignition-gazebo-physics-system' />
@@ -61,67 +57,42 @@
 
     
 
-    <!-- Oak tree -->
-    <include>
-      <uri>
-        https://fuel.gazebosim.org/1.0/OpenRobotics/models/Oak%20tree
-      </uri>
-      <name>oak1</name>
-      <pose>0 3.0 0 0 0 0</pose>
-    </include>
-    
-    <!-- Pine tree -->
-    <include>
-      <uri>
-        https://fuel.gazebosim.org/1.0/OpenRobotics/models/Pine%20tree
-      </uri>
-      <name>pine1</name>
-      <pose>5.0 0.0 0 0 0 0</pose>
-    </include>
 
-    <include>
-      <uri>model://fire</uri>
-      <name>test_fire</name>
-      <pose>4 4 0 0 0.05 1.91</pose>
-      
+    <!-- Hot test object positioned 5 meters in front of drone's starting position -->
+    <!-- Drone spawns at (0, 0, 2.0) facing forward (positive X direction) -->
+    <!-- So hot object should be at (5, 0, 1.0) to be visible to IR camera -->
+    <model name="hot_test_box">
       <static>true</static>
-    </include>
+      <pose>5.0 0.0 1.0 0 0 0</pose>
 
-    <!-- Add this directly to your world file after the fire include -->
-<model name="hot_test_box">
-  <static>true</static>
-  <pose>6 6 0.5 0 0 0</pose>
+      <link name="hot_link">
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>1 1 1</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>1 0 0 1</ambient>  <!-- Red for visibility -->
+            <diffuse>1 0 0 1</diffuse>
+            <specular>0 0 0 1</specular>
+            <emissive>1 0 0 1</emissive>  <!-- High emissive for thermal detection -->
+          </material>
+        </visual>
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>1 1 1</size>
+            </box>
+          </geometry>
+        </collision>
 
-  <link name="hot_link">
-    <visual name="visual">
-      <geometry>
-        <box>
-          <size>1 1 1</size>
-        </box>
-      </geometry>
-      <material>
-        <ambient>1 0 0 1</ambient>  <!-- Red for visibility -->
-        <diffuse>1 0 0 1</diffuse>
-      </material>
-    </visual>
-    <collision name="collision">
-      <geometry>
-        <box>
-          <size>1 1 1</size>
-        </box>
-      </geometry>
-    </collision>
-
-    <!-- Thermal properties on the link (Kelvin) -->
-    <plugin filename="libignition-gazebo-thermal-system.so" name="ignition::gazebo::systems::Thermal">
-      <temperature>
-        <uniform>
-          <temperature>673.15</temperature> <!-- 400°C -->
-        </uniform>
-      </temperature>
-    </plugin>
-  </link>
-</model>
+        <!-- Thermal properties on the link (Kelvin) -->
+        <plugin filename="libignition-gazebo-thermal-system.so" name="ignition::gazebo::systems::Thermal">
+          <temperature>673.15</temperature>
+        </plugin>
+      </link>
+    </model>
 
   </world>
 </sdf>

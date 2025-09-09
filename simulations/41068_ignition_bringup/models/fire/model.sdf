@@ -274,16 +274,15 @@
           </cylinder>
         </geometry>
       </collision>
+      <!-- Thermal properties on the fire link so the camera can see it -->
+      <plugin filename="libignition-gazebo-thermal-system.so" name="ignition::gazebo::systems::Thermal">
+        <temperature>
+          <uniform>
+            <temperature>673.15</temperature>  <!-- 400°C in Kelvin -->
+          </uniform>
+        </temperature>
+      </plugin>
     </link>
-
-    <!-- CORRECT way to add thermal properties -->
-    <plugin filename="libignition-gazebo-thermal-system.so" name="ignition::gazebo::systems::Thermal">
-      <temperature>
-        <uniform>
-          <temperature>673.15</temperature>  <!-- 400°C in Kelvin -->
-        </uniform>
-      </temperature>
-    </plugin>
 
   </model>
 </sdf>
