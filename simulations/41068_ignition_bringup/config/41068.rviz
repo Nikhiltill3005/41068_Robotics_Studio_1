@@ -257,7 +257,7 @@ Visualization Manager:
       Value: true
     - Class: rviz_default_plugins/Image
       Enabled: true
-      Max Value: 1
+      Max Value: 255
       Median window: 5
       Min Value: 0
       Name: IR Camera

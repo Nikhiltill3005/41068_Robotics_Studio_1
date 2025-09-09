@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <sdf version='1.8'>
   <world name="simple_trees">
-    <plugin filename="libignition-gazebo-thermal-system.so" name="ignition::gazebo::systems::Thermal">
+    <plugin filename="ignition-gazebo-thermal-system" name="ignition::gazebo::systems::Thermal">
       <temperature>293.15</temperature>
     </plugin>
     <!-- Basic world setup  -->
@@ -63,7 +63,7 @@
     <!-- So hot object should be at (5, 0, 1.0) to be visible to IR camera -->
     <model name="hot_test_box">
       <static>true</static>
-      <pose>5.0 0.0 1.0 0 0 0</pose>
+      <pose>3.0 0.0 2.0 0 0 0</pose>
 
       <link name="hot_link">
         <visual name="visual">
@@ -76,8 +76,12 @@
             <ambient>1 0 0 1</ambient>  <!-- Red for visibility -->
             <diffuse>1 0 0 1</diffuse>
             <specular>0 0 0 1</specular>
-            <emissive>1 0 0 1</emissive>  <!-- High emissive for thermal detection -->
+            <emissive>1 1 1 1</emissive>  <!-- Maximum emissive (white hot) -->
           </material>
+          <!-- Thermal properties directly on visual element -->
+          <plugin filename="ignition-gazebo-thermal-system" name="ignition::gazebo::systems::Thermal">
+            <temperature>1000.0</temperature>  <!-- Very hot: 727°C -->
+          </plugin>
         </visual>
         <collision name="collision">
           <geometry>
@@ -86,11 +90,6 @@
             </box>
           </geometry>
         </collision>
-
-        <!-- Thermal properties on the link (Kelvin) -->
-        <plugin filename="libignition-gazebo-thermal-system.so" name="ignition::gazebo::systems::Thermal">
-          <temperature>673.15</temperature>
-        </plugin>
       </link>
     </model>
 
