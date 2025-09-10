@@ -1,37 +1,41 @@
 <?xml version="1.0"?>
 <sdf version='1.8'>
   <world name="bushland_world">
+    <plugin filename="ignition-gazebo-thermal-system" name="ignition::gazebo::systems::Thermal">
+      <temperature>293.15</temperature>
+    </plugin>
     <!-- Basic world setup for Gazebo Ignition -->
     <plugin name='ignition::gazebo::systems::Physics' filename='ignition-gazebo-physics-system' />
     <plugin name='ignition::gazebo::systems::UserCommands' filename='ignition-gazebo-user-commands-system' />
     <plugin name='ignition::gazebo::systems::SceneBroadcaster' filename='ignition-gazebo-scene-broadcaster-system' />
     <plugin name='ignition::gazebo::systems::Contact' filename='ignition-gazebo-contact-system' />
-    
+    <plugin name='ignition::gazebo::systems::Sensors' filename='libignition-gazebo-sensors-system.so' />
     <!-- Sun light -->
     <light name="sun" type="directional">
       <cast_shadows>1</cast_shadows>
-      <pose>0 0 100 0 0 0</pose>
-      <diffuse>0.6 0.6 0.5 1</diffuse>
-      <specular>0.3 0.3 0.3 1</specular>
+      <pose>0 0 10 0 -0 0</pose>
+      <diffuse>0.8 0.8 0.8 1</diffuse>
+      <specular>0.2 0.2 0.2 1</specular>
+      <attenuation>
+        <range>1000</range>
+        <constant>0.9</constant>
+        <linear>0.01</linear>
+        <quadratic>0.001</quadratic>
+      </attenuation>
       <direction>-0.5 0.1 -0.9</direction>
-      <intensity>2</intensity>
     </light>
-
-    <!-- Physics and environment settings -->
-    <gravity>0 0 -9.81</gravity>
+    <gravity>0 0 0</gravity>
+    <magnetic_field>6e-06 2.3e-05 -4.2e-05</magnetic_field>
     <atmosphere type="adiabatic"/>
     <physics name="default_physics" type="ignored">
       <max_step_size>0.01</max_step_size>
       <real_time_factor>1</real_time_factor>
       <real_time_update_rate>100</real_time_update_rate>
     </physics>
-    
-    <!-- Scene settings -->
     <scene>
-      <ambient>0.95 0.95 0.8 1</ambient>
-      <background>0.6 0.7 0.9 1</background>
-      <shadows>0</shadows>
-      <grid>0</grid>
+      <ambient>1.0 1.0 1.0</ambient>
+      <background>0.8 0.8 0.8</background>
+      <shadows>1</shadows>
     </scene>
 
     <!-- Spherical coordinates -->
@@ -326,6 +330,73 @@
       
       <static>true</static>
     </include>
+
+    <include>
+      <uri>model://fire</uri>
+      <name>test_fire2</name>
+      <pose>13.3 5.15 0 0 0.05 1.91</pose>
+      
+      <static>true</static>
+    </include>
+
+    <include>
+      <uri>model://fire</uri>
+      <name>test_fire3</name>
+      <pose>24 8 0 0 0.05 1.91</pose>
+      
+      <static>true</static>
+    </include>
+
+    <include>
+      <uri>model://fire</uri>
+      <name>test_fire4</name>
+      <pose>-3 -8 0 0 0.05 1.91</pose>
+      
+      <static>true</static>
+    </include>
+
+    <include>
+      <uri>model://fire</uri>
+      <name>test_fire5</name>
+      <pose>-12 14 0 0 0.05 1.91</pose>
+      
+      <static>true</static>
+    </include>
+
+    <include>
+      <uri>model://fire</uri>
+      <name>test_fire6</name>
+      <pose>2 -14 0 0 0.05 1.91</pose>
+      
+      <static>true</static>
+    </include>
+
+    <include>
+      <uri>model://fire</uri>
+      <name>test_fire7</name>
+      <pose>22 -22 0 0 0.05 1.91</pose>
+      
+      <static>true</static>
+    </include>
+    
+
+    <include>
+      <uri>model://fire</uri>
+      <name>test_fire8</name>
+      <pose>-24 14 0 0 0.05 1.91</pose>
+      
+      <static>true</static>
+    </include>
+    
+
+    <include>
+      <uri>model://fire</uri>
+      <name>test_fire9</name>
+      <pose>22 -14 0 0 0.05 1.91</pose>
+      
+      <static>true</static>
+    </include>
+    
     
     <include>
       <uri>model://pine_tree</uri>
