@@ -24,8 +24,10 @@ def generate_launch_description():
                 'use_sim_time': LaunchConfiguration('use_sim_time')
             }],
             remappings=[
-                ('/drone/cmd_vel', '/drone/cmd_vel'),
-                ('/drone/imu', '/drone/imu'),
+                # Publish to bridge-expected topic name
+                ('/drone/cmd_vel', 'cmd_vel'),
+                # Subscribe from bridge-expected IMU topic name
+                ('/drone/imu', 'imu'),
                 ('/drone/teleop_status', '/drone/teleop_status')
             ]
         )
