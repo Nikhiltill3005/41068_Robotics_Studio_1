@@ -111,21 +111,54 @@ def generate_launch_description():
             # spawn in the air with an XY offset from Husky
             arguments=['-topic', 'robot_description', '-z', '2.0', '-x', '2.0', '-y', '0.0', '-name', 'drone']
         ),
-        # Optional: Drone joystick teleop and joy driver
+        # Optional: Combined joystick teleop for both vehicles
         GroupAction([
             Node(
                 package='joy',
                 executable='joy_node',
                 name='joy_node',
                 output='screen',
-                parameters=[{'use_sim_time': use_sim_time, 'autorepeat_rate': 20.0}]
+                parameters=[{
+                    'use_sim_time': use_sim_time, 
+                    'autorepeat_rate': 20.0,
+                    'deadzone': 0.12
+                }]
             ),
             Node(
                 package='drone_teleop',
-                executable='drone_joy_teleop',
-                name='drone_joy_teleop',
+                executable='combined_joy_teleop',
+                name='combined_joy_teleop',
                 output='screen',
-                parameters=[{'use_sim_time': use_sim_time}]
+                parameters=[{
+                    'use_sim_time': use_sim_time,
+                    # Common
+                    'enable_button': 4,   # LB for drone
+                    'turbo_button': 5,    # RB for husky
+                    'toggle_button': 3,   # Y button
+                    # Husky mapping/scales
+                    'husky_axis_linear_x': 1,
+                    'husky_axis_angular_z': 3,
+                    'husky_scale_linear': 2.0,
+                    'husky_scale_angular': 4.0,
+                    'husky_scale_linear_turbo': 4.0,
+                    'husky_scale_angular_turbo': 8.0,
+                    # Drone mapping/scales
+                    'drone_axis_linear_x': 1,
+                    'drone_axis_linear_y': 0,
+                    'drone_axis_linear_z': -1,
+                    'drone_axis_angular_z': 3,
+                    'drone_button_altitude_up': 0,   # A
+                    'drone_button_altitude_down': 2, # X
+                    'drone_scale_linear_xy': 1.5,
+                    'drone_scale_linear_z': 1.0,
+                    'drone_scale_angular_z': 2.0,
+                    'drone_scale_linear_xy_turbo': 3.0,
+                    'drone_scale_linear_z_turbo': 2.0,
+                    'drone_scale_angular_z_turbo': 4.0,
+                    # Hover settings to prevent drone from falling
+                    'drone_hover_when_disabled': True,
+                    'drone_hover_linear_z': 0.1,
+                }]
             )
         ], condition=IfCondition(LaunchConfiguration('drone_joy')))
     ])
@@ -149,7 +182,7 @@ def generate_launch_description():
     drone_joy_launch_arg = DeclareLaunchArgument(
         'drone_joy',
         default_value='True',
-        description='Flag to launch drone joystick teleop (Xbox)'
+        description='Flag to launch combined joystick teleop (RB=Husky, LB=Drone)'
     )
     ld.add_action(drone_joy_launch_arg)
 
