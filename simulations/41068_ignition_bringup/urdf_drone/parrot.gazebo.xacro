@@ -179,8 +179,8 @@
       <camera>
         <horizontal_fov>1.047</horizontal_fov>
         <image>
-          <width>320</width>
-          <height>240</height>
+          <width>640</width>
+          <height>480</height>
           <format>L8</format>  <!-- 8-bit thermal data -->
         </image>
         <clip>
