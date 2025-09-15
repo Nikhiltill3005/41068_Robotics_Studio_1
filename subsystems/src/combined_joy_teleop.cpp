@@ -134,7 +134,6 @@ private:
 
         const bool lb_pressed = read_button(enable_button_);  // LB
         const bool rb_pressed = read_button(turbo_button_);   // RB
-        const bool turbo = false; // RB is used as Husky enable; avoid permanent turbo
 
         // Bumper-based selection and enable: RB selects Husky, LB selects Drone.
         if (rb_pressed || lb_pressed) {

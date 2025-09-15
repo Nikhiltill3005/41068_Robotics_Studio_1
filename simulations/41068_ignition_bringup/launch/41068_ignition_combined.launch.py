@@ -32,6 +32,15 @@ def generate_launch_description():
     )
     ld.add_action(world_launch_arg)
 
+    # Declare drone_joy argument early so it can be used in conditions
+    drone_joy_launch_arg = DeclareLaunchArgument(
+        'drone_joy',
+        default_value='True',
+        description='Flag to launch combined joystick teleop (RB=Husky, LB=Drone)'
+    )
+    ld.add_action(drone_joy_launch_arg)
+    drone_joy = LaunchConfiguration('drone_joy')
+
     # Start Gazebo once
     gazebo = IncludeLaunchDescription(
         PathJoinSubstitution([FindPackageShare('ros_ign_gazebo'),
@@ -160,7 +169,7 @@ def generate_launch_description():
                     'drone_hover_linear_z': 0.1,
                 }]
             )
-        ], condition=IfCondition(LaunchConfiguration('drone_joy')))
+        ], condition=IfCondition(drone_joy))
     ])
     ld.add_action(drone_group)
 
@@ -178,13 +187,6 @@ def generate_launch_description():
         description='Flag to launch Nav2 for Husky only'
     )
     ld.add_action(nav2_launch_arg)
-
-    drone_joy_launch_arg = DeclareLaunchArgument(
-        'drone_joy',
-        default_value='True',
-        description='Flag to launch combined joystick teleop (RB=Husky, LB=Drone)'
-    )
-    ld.add_action(drone_joy_launch_arg)
 
     # RViz (global)
     rviz_node = Node(
