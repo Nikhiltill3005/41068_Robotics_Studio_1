@@ -15,12 +15,12 @@ class FireDetectionNode(Node):
         # Initialize CV bridge
         self.bridge = CvBridge()
         
-        # Subscriber to thermal camera
+        # Subscriber to thermal camera (reduced queue size to prevent lag)
         self.image_sub = self.create_subscription(
             Image,
             '/drone/ir_camera/image_raw',
             self.image_callback,
-            10
+            1  # Reduced from 10 to 1 to prevent buffering lag
         )
         
         # Publisher for detected fire locations
@@ -42,9 +42,24 @@ class FireDetectionNode(Node):
         self.min_area = 50  # Minimum fire area in pixels
         self.max_area = 10000  # Maximum area to avoid false positives
         
+        # Throttling to reduce processing load
+        self.last_process_time = self.get_clock().now()
+        self.process_interval = 0.5  # Process every 0.5 seconds instead of every frame
+        self.frame_count = 0
+        
         self.get_logger().info('Fire Detection Node started - monitoring thermal camera')
 
     def image_callback(self, msg):
+        # Throttle processing to reduce CPU load
+        current_time = self.get_clock().now()
+        time_diff = (current_time - self.last_process_time).nanoseconds / 1e9
+        
+        if time_diff < self.process_interval:
+            return  # Skip this frame
+            
+        self.last_process_time = current_time
+        self.frame_count += 1
+        
         try:
             # Convert ROS image to OpenCV based on encoding
             if msg.encoding == 'mono8':
@@ -58,18 +73,12 @@ class FireDetectionNode(Node):
                 cv_image = cv2.cvtColor(cv_image, cv2.COLOR_BGR2GRAY)
                 self.brightness_threshold = 200
 
-            # DEBUG: Check actual pixel values
-            min_val = np.min(cv_image)
-            max_val = np.max(cv_image)
-            mean_val = np.mean(cv_image)
-            unique_values = len(np.unique(cv_image))
-            
-            self.get_logger().info(f'Pixel stats - Min: {min_val}, Max: {max_val}, Mean: {mean_val:.1f}, Unique values: {unique_values}')
-            
-            # Sample some specific pixels
-            center_pixel = cv_image[cv_image.shape[0]//2, cv_image.shape[1]//2]
-            corner_pixel = cv_image[10, 10]
-            self.get_logger().info(f'Sample pixels - Center: {center_pixel}, Corner: {corner_pixel}')
+            # Only log debug info occasionally to reduce CPU load
+            if self.frame_count % 20 == 0:  # Log every 20th processed frame (every 10 seconds at 0.5s interval)
+                min_val = np.min(cv_image)
+                max_val = np.max(cv_image)
+                mean_val = np.mean(cv_image)
+                self.get_logger().info(f'Frame {self.frame_count} - Pixel range: {min_val}-{max_val}, Mean: {mean_val:.1f}')
             
             
             # Detect fires

@@ -188,13 +188,20 @@ def generate_launch_description():
     )
     ld.add_action(nav2_launch_arg)
 
+    fire_search_launch_arg = DeclareLaunchArgument(
+        'fire_search',
+        default_value='False',
+        description='Flag to launch drone fire search pattern'
+    )
+    ld.add_action(fire_search_launch_arg)
+
     # RViz (global)
     rviz_node = Node(
         package='rviz2',
         executable='rviz2',
         output='screen',
         parameters=[{'use_sim_time': use_sim_time}],
-        arguments=['-d', PathJoinSubstitution([pkg_path, 'config', '41068_ignition_combined.rviz'])],
+        arguments=['-d', PathJoinSubstitution([pkg_path, 'config', '41068.rviz'])],
         condition=IfCondition(LaunchConfiguration('rviz'))
     )
     ld.add_action(rviz_node)
@@ -206,6 +213,13 @@ def generate_launch_description():
         condition=IfCondition(LaunchConfiguration('nav2'))
     )
     ld.add_action(GroupAction([PushRosNamespace('husky'), nav2]))
+
+    # Fire Search Pattern (drone namespace)
+    fire_search = IncludeLaunchDescription(
+        PathJoinSubstitution([FindPackageShare('drone_teleop'), 'launch', 'drone_fire_search.launch.py']),
+        condition=IfCondition(LaunchConfiguration('fire_search'))
+    )
+    ld.add_action(fire_search)
 
     return ld
 

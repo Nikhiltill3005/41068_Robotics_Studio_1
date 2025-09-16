@@ -18,12 +18,12 @@
                iyy="1.764e-3" iyz="3.595e-7"
                izz="3.328e-3" />
     </inertial>
-<!--     <collision name="collision">
-      <origin xyz="-0.00424 0.00014 -0.00595" rpy="0 0 0"/>
+    <collision name="collision">
+      <origin xyz="0 0 0" rpy="0 0 0"/>
       <geometry>
-        <box size="0.5 0.5 0.2"/>
+        <box size="0.3 0.3 0.1"/>
       </geometry>
-    </collision> -->
+    </collision>
     <visual name="hull">
       <geometry>
         <mesh filename="file://$(find 41068_ignition_bringup)/urdf_drone/meshes/hull.dae"/>
@@ -89,7 +89,7 @@
   </link>
 
   <joint name="camera_joint" type="fixed">
-    <origin xyz="0.25 0.0 0.25" rpy="0 0.785398 0"/> <!-- 0.5 0.0 0.9 -->
+    <origin xyz="0.15 0.0 0.1" rpy="0 0 0"/> <!-- Moved closer and higher up on drone --> 
     <parent link="base_link"/>
     <child link="camera_link"/>
   </joint>
@@ -158,12 +158,74 @@
   </inertial>
 </link>
 
-<!-- Joint to attach camera to bottom of drone -->
+<!-- Joint to attach camera to front of drone -->
 <joint name="ir_camera_joint" type="fixed">
   <parent link="base_link"/>
   <child link="ir_camera_link"/>
-  <origin xyz="0 0 -0.1" rpy="0 1.57 0"/> 
+  <origin xyz="0.1 0 0.05" rpy="0 0 0"/> <!-- Moved to front and slightly up -->
 </joint>
+
+  <!-- Propeller Links and Joints for MulticopterVelocityControl -->
+  
+  <!-- Front Left Propeller -->
+  <link name="propeller_fl_link">
+    <inertial>
+      <mass value="0.005"/>
+      <inertia ixx="0.000001" ixy="0" ixz="0" iyy="0.000001" iyz="0" izz="0.000001"/>
+    </inertial>
+  </link>
+  
+  <joint name="propeller_fl_joint" type="continuous">
+    <parent link="base_link"/>
+    <child link="propeller_fl_link"/>
+    <origin xyz="0.08456 0.11463 -0.00501" rpy="0 0 0"/>
+    <axis xyz="0 0 1"/>
+  </joint>
+  
+  <!-- Front Right Propeller -->
+  <link name="propeller_fr_link">
+    <inertial>
+      <mass value="0.005"/>
+      <inertia ixx="0.000001" ixy="0" ixz="0" iyy="0.000001" iyz="0" izz="0.000001"/>
+    </inertial>
+  </link>
+  
+  <joint name="propeller_fr_joint" type="continuous">
+    <parent link="base_link"/>
+    <child link="propeller_fr_link"/>
+    <origin xyz="0.08456 -0.11435 -0.00501" rpy="0 0 0"/>
+    <axis xyz="0 0 1"/>
+  </joint>
+  
+  <!-- Rear Left Propeller -->
+  <link name="propeller_rl_link">
+    <inertial>
+      <mass value="0.005"/>
+      <inertia ixx="0.000001" ixy="0" ixz="0" iyy="0.000001" iyz="0" izz="0.000001"/>
+    </inertial>
+  </link>
+  
+  <joint name="propeller_rl_joint" type="continuous">
+    <parent link="base_link"/>
+    <child link="propeller_rl_link"/>
+    <origin xyz="0.09035 0.11452 -0.00501" rpy="0 0 0"/>
+    <axis xyz="0 0 1"/>
+  </joint>
+  
+  <!-- Rear Right Propeller -->
+  <link name="propeller_rr_link">
+    <inertial>
+      <mass value="0.005"/>
+      <inertia ixx="0.000001" ixy="0" ixz="0" iyy="0.000001" iyz="0" izz="0.000001"/>
+    </inertial>
+  </link>
+  
+  <joint name="propeller_rr_joint" type="continuous">
+    <parent link="base_link"/>
+    <child link="propeller_rr_link"/>
+    <origin xyz="-0.09035 -0.11423 -0.00501" rpy="0 0 0"/>
+    <axis xyz="0 0 1"/>
+  </joint>
 
 
 </robot>
