@@ -16,7 +16,6 @@ find_package(nav_msgs REQUIRED)
 # Create executables
 add_executable(drone_joy_teleop src/drone_joy_teleop.cpp)
 add_executable(combined_joy_teleop src/combined_joy_teleop.cpp)
-add_executable(drone_search_pattern src/drone_search_pattern.cpp)
 
 # Specify libraries to link a library or executable target against
 ament_target_dependencies(drone_joy_teleop
@@ -33,19 +32,11 @@ ament_target_dependencies(combined_joy_teleop
   std_msgs
 )
 
-ament_target_dependencies(drone_search_pattern
-  rclcpp
-  geometry_msgs
-  sensor_msgs
-  std_msgs
-  nav_msgs
-)
 
 # Install targets
 install(TARGETS
   drone_joy_teleop
   combined_joy_teleop
-  drone_search_pattern
   DESTINATION lib/${PROJECT_NAME}
 )
 

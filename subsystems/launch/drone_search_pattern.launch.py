@@ -7,7 +7,7 @@ def generate_launch_description():
     # Declare launch arguments
     search_altitude_arg = DeclareLaunchArgument(
         'search_altitude',
-        default_value='3.0',
+        default_value='5.0',
         description='Altitude to maintain during search (meters)'
     )
     
@@ -43,9 +43,9 @@ def generate_launch_description():
 
     # Drone search pattern node
     drone_search_node = Node(
-        package='drone_teleop',
-        executable='drone_search_pattern',
-        name='drone_search_pattern',
+        package='41068_ignition_bringup',
+        executable='drone_search_pattern_node.py',
+        name='drone_search_pattern_node',
         namespace='drone',
         output='screen',
         parameters=[{
@@ -55,9 +55,10 @@ def generate_launch_description():
             'pattern_length': LaunchConfiguration('pattern_length'),
             'lane_spacing': LaunchConfiguration('lane_spacing'),
             'waypoint_tolerance': 0.5,
-            'fire_investigation_time': 10.0,
+            'fire_investigation_time': 15.0,  # Longer investigation time
             'fire_hover_altitude': 2.0,
             'auto_start': LaunchConfiguration('auto_start'),
+            'use_sim_time': True
         }]
     )
 

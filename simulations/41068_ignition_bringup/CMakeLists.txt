@@ -19,6 +19,7 @@ install(
 install(PROGRAMS
   scripts/fire_detection_node.py
   scripts/drone_fire_centering_node.py
+  scripts/drone_search_pattern_node.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
