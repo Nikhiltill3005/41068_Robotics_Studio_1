@@ -58,7 +58,7 @@ def generate_launch_description():
         
         DeclareLaunchArgument(
             'target_height',
-            default_value='7.5',
+            default_value='14.0',
             description='Target height in meters'
         ),
         

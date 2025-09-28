@@ -118,7 +118,7 @@ def generate_launch_description():
             output='screen',
             parameters=[{'use_sim_time': use_sim_time}],
             # spawn in the air with an XY offset from Husky
-            arguments=['-topic', 'robot_description', '-z', '2.0', '-x', '2.0', '-y', '0.0', '-name', 'drone']
+            arguments=['-topic', 'robot_description', '-z', '14.0', '-x', '2.0', '-y', '0.0', '-name', 'drone']
         ),
         # Optional: Combined joystick teleop for both vehicles
         GroupAction([

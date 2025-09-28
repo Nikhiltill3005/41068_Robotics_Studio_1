@@ -216,7 +216,7 @@
         <temperature_linear_resolution>0.01</temperature_linear_resolution>
       </thermal_camera>
       <always_on>1</always_on>
-      <update_rate>5</update_rate>  
+      <update_rate>30</update_rate>  
       <visualize>true</visualize>
       <topic>/model/drone/ir_camera</topic>
       <gz_frame_id>ir_camera_link</gz_frame_id>
