@@ -2,7 +2,7 @@
 
 import rclpy
 from rclpy.node import Node
-from geometry_msgs.msg import Twist, PointStamped
+from geometry_msgs.msg import Twist, PointStamped, PoseArray, Pose
 from nav_msgs.msg import Odometry
 from sensor_msgs.msg import Image
 from cv_bridge import CvBridge
@@ -29,7 +29,7 @@ class FireScanNode(Node):
         
         # Control parameters
         self.declare_parameter('enabled', True)
-        self.declare_parameter('scan_speed', 2.0)
+        self.declare_parameter('scan_speed', 3.5)
         self.declare_parameter('target_height', 14.0)
         self.declare_parameter('height_tolerance', 0.5)
         
@@ -68,6 +68,7 @@ class FireScanNode(Node):
         # Publishers
         self.cmd_vel_pub = self.create_publisher(Twist, '/drone/cmd_vel', 10)
         self.fire_position_pub = self.create_publisher(PointStamped, '/drone/fire_scan/fire_position', 10)
+        self.fire_positions_pub = self.create_publisher(PoseArray, '/drone/fire_scan/fire_positions', 10)
         self.debug_image_pub = self.create_publisher(Image, '/drone/fire_scan/debug_image', 10)
         
         # Subscribers
@@ -77,6 +78,7 @@ class FireScanNode(Node):
         # Timers
         self.control_timer = self.create_timer(0.05, self.control_loop)  # 20 Hz
         self.status_timer = self.create_timer(2.0, self.status_update)   # Every 2 seconds
+        self.fire_positions_timer = self.create_timer(1.0, self.publish_all_fire_positions)  # Publish fire positions every second
         
         # Initialize
         self.generate_search_pattern()
@@ -85,6 +87,8 @@ class FireScanNode(Node):
         self.get_logger().info(f'Fire Scan Node started')
         self.get_logger().info(f'Target height: {self.target_height}m, Scan speed: {self.scan_speed}m/s')
         self.get_logger().info(f'Grid spacing: {self.search_grid_spacing}m, Fire detection threshold: {self.brightness_threshold}')
+        self.get_logger().info('Publishing individual fires to: /drone/fire_scan/fire_position')
+        self.get_logger().info('Publishing all fire positions to: /drone/fire_scan/fire_positions')
 
     def thermal_callback(self, msg):
         """Process thermal images and detect fires - log immediately without centering"""
@@ -152,6 +156,31 @@ class FireScanNode(Node):
         self.fire_position_pub.publish(msg)
         
         self.get_logger().info(f'FIRE LOGGED #{len(self.detected_fires)}: World({fire_world[0]:.1f}, {fire_world[1]:.1f}) Pixel({pixel_x}, {pixel_y}) Area({area:.0f}px)')
+        
+        # Publish all detected fires
+        self.publish_all_fire_positions()
+
+    def publish_all_fire_positions(self):
+        """Publish all detected fire positions as a PoseArray"""
+        pose_array = PoseArray()
+        pose_array.header.stamp = self.get_clock().now().to_msg()
+        pose_array.header.frame_id = "map"
+        
+        for fire_world in self.detected_fires:
+            pose = Pose()
+            pose.position.x = fire_world[0]
+            pose.position.y = fire_world[1]
+            pose.position.z = fire_world[2]
+            
+            # Set default orientation (no rotation)
+            pose.orientation.x = 0.0
+            pose.orientation.y = 0.0
+            pose.orientation.z = 0.0
+            pose.orientation.w = 1.0
+            
+            pose_array.poses.append(pose)
+        
+        self.fire_positions_pub.publish(pose_array)
 
     def odom_callback(self, msg):
         """Update drone position"""
