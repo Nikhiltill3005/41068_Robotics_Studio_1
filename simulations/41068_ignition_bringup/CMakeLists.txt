@@ -18,6 +18,7 @@ install(
 # Install Python scripts
 install(PROGRAMS
   scripts/fire_detection_node.py
+  scripts/odom_tf_publisher.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
