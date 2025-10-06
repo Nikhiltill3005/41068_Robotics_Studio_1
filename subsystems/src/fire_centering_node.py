@@ -63,11 +63,10 @@ class FireScanNode(Node):
         
         # Fire logging - much simpler
         self.detected_fires = []  # List of world positions
-        self.duplicate_threshold = 8.0  # Increased from 3.0 meters - more forgiving for testing
+        self.duplicate_threshold = 15.0  # Increased threshold to prevent multiple detections of same fire
         
         # Publishers
         self.cmd_vel_pub = self.create_publisher(Twist, '/drone/cmd_vel', 10)
-        self.fire_position_pub = self.create_publisher(PointStamped, '/drone/fire_scan/fire_position', 10)
         self.fire_positions_pub = self.create_publisher(PoseArray, '/drone/fire_scan/fire_positions', 10)
         self.debug_image_pub = self.create_publisher(Image, '/drone/fire_scan/debug_image', 10)
         
@@ -87,7 +86,6 @@ class FireScanNode(Node):
         self.get_logger().info(f'Fire Scan Node started')
         self.get_logger().info(f'Target height: {self.target_height}m, Scan speed: {self.scan_speed}m/s')
         self.get_logger().info(f'Grid spacing: {self.search_grid_spacing}m, Fire detection threshold: {self.brightness_threshold}')
-        self.get_logger().info('Publishing individual fires to: /drone/fire_scan/fire_position')
         self.get_logger().info('Publishing all fire positions to: /drone/fire_scan/fire_positions')
 
     def thermal_callback(self, msg):
@@ -146,14 +144,8 @@ class FireScanNode(Node):
         """Log fire position immediately when detected"""
         self.detected_fires.append(fire_world)
         
-        # Publish fire location
-        msg = PointStamped()
-        msg.header.stamp = self.get_clock().now().to_msg()
-        msg.header.frame_id = "map"
-        msg.point.x = fire_world[0]
-        msg.point.y = fire_world[1] 
-        msg.point.z = fire_world[2]
-        self.fire_position_pub.publish(msg)
+        # Note: Individual fire positions are published via the PoseArray publisher
+        # in the publish_all_fire_positions method
         
         self.get_logger().info(f'FIRE LOGGED #{len(self.detected_fires)}: World({fire_world[0]:.1f}, {fire_world[1]:.1f}) Pixel({pixel_x}, {pixel_y}) Area({area:.0f}px)')
         
@@ -258,22 +250,36 @@ class FireScanNode(Node):
         return cmd
 
     def estimate_fire_world_position(self, fire_x, fire_y):
-        """Calculate fire world position"""
+        """Calculate fire world position accounting for downward-facing camera rotation"""
         if self.drone_position is None:
             return None
             
+        # Camera pixel coordinates relative to center
         dx = fire_x - self.cx
         dy = fire_y - self.cy
         
-        angle_x = math.atan2(dx, self.fx)
-        angle_y = math.atan2(dy, self.fy)
+        # Calculate angles in camera frame
+        angle_x = math.atan2(dx, self.fx)  # Horizontal angle in camera frame
+        angle_y = math.atan2(dy, self.fy)  # Vertical angle in camera frame
         
-        drone_z = self.drone_position.z
-        offset_x = drone_z * math.tan(angle_x)
-        offset_y = drone_z * math.tan(angle_y)
+        # Camera is rotated 90° around Y-axis (rpy="0 1.57 0") to face downward
+        # Camera coordinate system transformation:
+        # - Camera X (horizontal) maps to World X (forward)
+        # - Camera Y (vertical) maps to World -Y (left, due to image coordinates)
+        # - Camera Z (depth) maps to World -Z (downward)
         
-        world_x = self.drone_position.x + offset_x
-        world_y = self.drone_position.y + offset_y
+        drone_height = self.drone_position.z
+        if drone_height <= 0.1:  # Avoid division by very small numbers
+            return None
+            
+        # Calculate ground projection distances
+        # For a downward-facing camera, the ground distance is height * tan(angle)
+        ground_distance_x = drone_height * math.tan(angle_x)  # Forward/backward offset
+        ground_distance_y = drone_height * math.tan(-angle_y) # Left/right offset (negative due to image Y-axis)
+        
+        # Transform to world coordinates
+        world_x = self.drone_position.x + ground_distance_x
+        world_y = self.drone_position.y + ground_distance_y
         
         return (world_x, world_y, 0.0)
 
