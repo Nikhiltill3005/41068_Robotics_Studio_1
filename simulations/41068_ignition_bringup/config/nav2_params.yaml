@@ -194,6 +194,8 @@ local_costmap:
       width: 10
       height: 10
       resolution: 0.05 
+      # finer grid to better capture small obstacles
+      resolution: 0.03 
       footprint: "[ [0.5, 0.5], [0.5, -0.5], [-0.5, -0.5], [-0.5, 0.5] ]"
       plugins: ["obstacle_layer", "inflation_layer"]
       inflation_layer:
@@ -228,26 +230,14 @@ global_costmap:
       robot_base_frame: base_link
       use_sim_time: True
       footprint: "[ [0.5, 0.5], [0.5, -0.5], [-0.5, -0.5], [-0.5, 0.5] ]"
-      resolution: 0.1
+      # align global grid with SLAM for finer obstacle representation
+      resolution: 0.03
       track_unknown_space: true
-      plugins: ["static_layer", "obstacle_layer", "inflation_layer"]
-      obstacle_layer:
-        plugin: "nav2_costmap_2d::ObstacleLayer"
-        enabled: True
-        observation_sources: scan
-        scan:
-          topic: /husky/scan
-          max_obstacle_height: 2.0
-          clearing: True
-          marking: True
-          data_type: "LaserScan"
-          raytrace_max_range: 20.0
-          raytrace_min_range: 0.0
-          obstacle_max_range: 10.0
-          obstacle_min_range: 0.0
+      plugins: ["static_layer", "inflation_layer"]
       static_layer:
         plugin: "nav2_costmap_2d::StaticLayer"
         map_subscribe_transient_local: True
+        subscribe_to_updates: True
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
         cost_scaling_factor: 3.0
