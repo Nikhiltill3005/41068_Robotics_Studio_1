@@ -1,0 +1,88 @@
+[0.006s] Invoking command in '/home/amadee/41068_ws/src/41068_Robotics_Studio_1/build/drone_teleop': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/opt/ros/humble /usr/bin/cmake /home/amadee/41068_ws/src/41068_Robotics_Studio_1/subsystems -DCMAKE_INSTALL_PREFIX=/home/amadee/41068_ws/src/41068_Robotics_Studio_1/install/drone_teleop
+[0.101s] -- The C compiler identification is GNU 11.4.0
+[0.190s] -- The CXX compiler identification is GNU 11.4.0
+[0.199s] -- Detecting C compiler ABI info
+[0.258s] -- Detecting C compiler ABI info - done
+[0.264s] -- Check for working C compiler: /usr/bin/cc - skipped
+[0.264s] -- Detecting C compile features
+[0.265s] -- Detecting C compile features - done
+[0.268s] -- Detecting CXX compiler ABI info
+[0.338s] -- Detecting CXX compiler ABI info - done
+[0.342s] -- Check for working CXX compiler: /usr/bin/c++ - skipped
+[0.343s] -- Detecting CXX compile features
+[0.343s] -- Detecting CXX compile features - done
+[0.347s] -- Found ament_cmake: 1.3.12 (/opt/ros/humble/share/ament_cmake/cmake)
+[0.471s] -- Found Python3: /usr/bin/python3 (found version "3.10.12") found components: Interpreter 
+[0.557s] -- Found rclcpp: 16.0.14 (/opt/ros/humble/share/rclcpp/cmake)
+[0.601s] -- Found rosidl_generator_c: 3.1.7 (/opt/ros/humble/share/rosidl_generator_c/cmake)
+[0.606s] -- Found rosidl_adapter: 3.1.7 (/opt/ros/humble/share/rosidl_adapter/cmake)
+[0.618s] -- Found rosidl_generator_cpp: 3.1.7 (/opt/ros/humble/share/rosidl_generator_cpp/cmake)
+[0.637s] -- Using all available rosidl_typesupport_c: rosidl_typesupport_fastrtps_c;rosidl_typesupport_introspection_c
+[0.655s] -- Using all available rosidl_typesupport_cpp: rosidl_typesupport_fastrtps_cpp;rosidl_typesupport_introspection_cpp
+[0.704s] -- Found rmw_implementation_cmake: 6.1.2 (/opt/ros/humble/share/rmw_implementation_cmake/cmake)
+[0.708s] -- Found rmw_fastrtps_cpp: 6.2.8 (/opt/ros/humble/share/rmw_fastrtps_cpp/cmake)
+[0.806s] -- Found OpenSSL: /usr/lib/x86_64-linux-gnu/libcrypto.so (found version "3.0.2")  
+[0.829s] -- Found FastRTPS: /opt/ros/humble/include  
+[0.859s] -- Using RMW implementation 'rmw_fastrtps_cpp' as default
+[0.873s] -- Looking for pthread.h
+[0.977s] -- Looking for pthread.h - found
+[0.978s] -- Performing Test CMAKE_HAVE_LIBC_PTHREAD
+[1.060s] -- Performing Test CMAKE_HAVE_LIBC_PTHREAD - Success
+[1.060s] -- Found Threads: TRUE  
+[1.116s] -- Found geometry_msgs: 4.9.0 (/opt/ros/humble/share/geometry_msgs/cmake)
+[1.126s] -- Found sensor_msgs: 4.9.0 (/opt/ros/humble/share/sensor_msgs/cmake)
+[1.144s] -- Found nav_msgs: 4.9.0 (/opt/ros/humble/share/nav_msgs/cmake)
+[1.162s] -- Found ament_lint_auto: 0.12.14 (/opt/ros/humble/share/ament_lint_auto/cmake)
+[1.219s] -- Added test 'copyright' to check source files copyright and LICENSE
+[1.220s] -- Added test 'cppcheck' to perform static code analysis on C / C++ code
+[1.220s] -- Configured cppcheck include dirs: 
+[1.220s] -- Configured cppcheck exclude dirs and/or files: 
+[1.220s] -- Added test 'cpplint' to check C / C++ code against the Google style
+[1.220s] -- Configured cpplint exclude dirs and/or files: 
+[1.220s] -- Added test 'flake8' to check Python code syntax and style conventions
+[1.221s] -- Added test 'lint_cmake' to check CMake code style
+[1.221s] -- Added test 'pep257' to check Python code against some of the docstring style conventions in PEP 257
+[1.222s] -- Added test 'uncrustify' to check C / C++ code style
+[1.222s] -- Configured uncrustify additional arguments: 
+[1.222s] -- Added test 'xmllint' to check XML markup files
+[1.222s] -- Configuring done
+[1.230s] -- Generating done
+[1.233s] -- Build files have been written to: /home/amadee/41068_ws/src/41068_Robotics_Studio_1/build/drone_teleop
+[1.240s] Invoked command in '/home/amadee/41068_ws/src/41068_Robotics_Studio_1/build/drone_teleop' returned '0': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/opt/ros/humble /usr/bin/cmake /home/amadee/41068_ws/src/41068_Robotics_Studio_1/subsystems -DCMAKE_INSTALL_PREFIX=/home/amadee/41068_ws/src/41068_Robotics_Studio_1/install/drone_teleop
+[1.241s] Invoking command in '/home/amadee/41068_ws/src/41068_Robotics_Studio_1/build/drone_teleop': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/opt/ros/humble /usr/bin/cmake --build /home/amadee/41068_ws/src/41068_Robotics_Studio_1/build/drone_teleop -- -j16 -l16
+[1.288s] [ 25%] [32mBuilding CXX object CMakeFiles/drone_joy_teleop.dir/src/drone_joy_teleop.cpp.o[0m
+[1.289s] [ 50%] [32mBuilding CXX object CMakeFiles/combined_joy_teleop.dir/src/combined_joy_teleop.cpp.o[0m
+[7.289s] [ 75%] [32m[1mLinking CXX executable combined_joy_teleop[0m
+[7.336s] [100%] [32m[1mLinking CXX executable drone_joy_teleop[0m
+[7.618s] [100%] Built target combined_joy_teleop
+[7.632s] [100%] Built target drone_joy_teleop
+[7.644s] Invoked command in '/home/amadee/41068_ws/src/41068_Robotics_Studio_1/build/drone_teleop' returned '0': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/opt/ros/humble /usr/bin/cmake --build /home/amadee/41068_ws/src/41068_Robotics_Studio_1/build/drone_teleop -- -j16 -l16
+[7.646s] Invoking command in '/home/amadee/41068_ws/src/41068_Robotics_Studio_1/build/drone_teleop': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/opt/ros/humble /usr/bin/cmake --install /home/amadee/41068_ws/src/41068_Robotics_Studio_1/build/drone_teleop
+[7.656s] -- Install configuration: ""
+[7.656s] -- Installing: /home/amadee/41068_ws/src/41068_Robotics_Studio_1/install/drone_teleop/lib/drone_teleop/drone_joy_teleop
+[7.660s] -- Set runtime path of "/home/amadee/41068_ws/src/41068_Robotics_Studio_1/install/drone_teleop/lib/drone_teleop/drone_joy_teleop" to ""
+[7.660s] -- Installing: /home/amadee/41068_ws/src/41068_Robotics_Studio_1/install/drone_teleop/lib/drone_teleop/combined_joy_teleop
+[7.664s] -- Set runtime path of "/home/amadee/41068_ws/src/41068_Robotics_Studio_1/install/drone_teleop/lib/drone_teleop/combined_joy_teleop" to ""
+[7.664s] -- Installing: /home/amadee/41068_ws/src/41068_Robotics_Studio_1/install/drone_teleop/share/drone_teleop//launch
+[7.664s] -- Installing: /home/amadee/41068_ws/src/41068_Robotics_Studio_1/install/drone_teleop/share/drone_teleop//launch/husky_joy_teleop.launch.py
+[7.665s] -- Installing: /home/amadee/41068_ws/src/41068_Robotics_Studio_1/install/drone_teleop/share/drone_teleop//launch/fire_centering.launch.py
+[7.665s] -- Installing: /home/amadee/41068_ws/src/41068_Robotics_Studio_1/install/drone_teleop/share/drone_teleop//launch/combined_joy_teleop.launch.py
+[7.665s] -- Installing: /home/amadee/41068_ws/src/41068_Robotics_Studio_1/install/drone_teleop/share/drone_teleop//launch/drone_teleop.launch.py
+[7.666s] -- Installing: /home/amadee/41068_ws/src/41068_Robotics_Studio_1/install/drone_teleop/share/drone_teleop//launch/drone_joy_teleop.launch.py
+[7.666s] -- Installing: /home/amadee/41068_ws/src/41068_Robotics_Studio_1/install/drone_teleop/lib/drone_teleop/fire_centering_node.py
+[7.666s] -- Installing: /home/amadee/41068_ws/src/41068_Robotics_Studio_1/install/drone_teleop/share/ament_index/resource_index/package_run_dependencies/drone_teleop
+[7.666s] -- Installing: /home/amadee/41068_ws/src/41068_Robotics_Studio_1/install/drone_teleop/share/ament_index/resource_index/parent_prefix_path/drone_teleop
+[7.667s] -- Installing: /home/amadee/41068_ws/src/41068_Robotics_Studio_1/install/drone_teleop/share/drone_teleop/environment/ament_prefix_path.sh
+[7.667s] -- Installing: /home/amadee/41068_ws/src/41068_Robotics_Studio_1/install/drone_teleop/share/drone_teleop/environment/ament_prefix_path.dsv
+[7.667s] -- Installing: /home/amadee/41068_ws/src/41068_Robotics_Studio_1/install/drone_teleop/share/drone_teleop/environment/path.sh
+[7.667s] -- Installing: /home/amadee/41068_ws/src/41068_Robotics_Studio_1/install/drone_teleop/share/drone_teleop/environment/path.dsv
+[7.667s] -- Installing: /home/amadee/41068_ws/src/41068_Robotics_Studio_1/install/drone_teleop/share/drone_teleop/local_setup.bash
+[7.667s] -- Installing: /home/amadee/41068_ws/src/41068_Robotics_Studio_1/install/drone_teleop/share/drone_teleop/local_setup.sh
+[7.667s] -- Installing: /home/amadee/41068_ws/src/41068_Robotics_Studio_1/install/drone_teleop/share/drone_teleop/local_setup.zsh
+[7.667s] -- Installing: /home/amadee/41068_ws/src/41068_Robotics_Studio_1/install/drone_teleop/share/drone_teleop/local_setup.dsv
+[7.667s] -- Installing: /home/amadee/41068_ws/src/41068_Robotics_Studio_1/install/drone_teleop/share/drone_teleop/package.dsv
+[7.667s] -- Installing: /home/amadee/41068_ws/src/41068_Robotics_Studio_1/install/drone_teleop/share/ament_index/resource_index/packages/drone_teleop
+[7.667s] -- Installing: /home/amadee/41068_ws/src/41068_Robotics_Studio_1/install/drone_teleop/share/drone_teleop/cmake/drone_teleopConfig.cmake
+[7.667s] -- Installing: /home/amadee/41068_ws/src/41068_Robotics_Studio_1/install/drone_teleop/share/drone_teleop/cmake/drone_teleopConfig-version.cmake
+[7.668s] -- Installing: /home/amadee/41068_ws/src/41068_Robotics_Studio_1/install/drone_teleop/share/drone_teleop/package.xml
+[7.670s] Invoked command in '/home/amadee/41068_ws/src/41068_Robotics_Studio_1/build/drone_teleop' returned '0': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/opt/ros/humble /usr/bin/cmake --install /home/amadee/41068_ws/src/41068_Robotics_Studio_1/build/drone_teleop
