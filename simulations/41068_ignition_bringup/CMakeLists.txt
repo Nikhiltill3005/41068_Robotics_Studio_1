@@ -22,6 +22,7 @@ install(PROGRAMS
   scripts/positioning_data.py
   scripts/navigation_gui.py
   scripts/cmd_vel_relay.py
+  scripts/autonomous_firefighter_node.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

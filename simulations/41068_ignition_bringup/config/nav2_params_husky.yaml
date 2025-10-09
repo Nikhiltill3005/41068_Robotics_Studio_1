@@ -136,19 +136,19 @@ controller_server:
     general_goal_checker:
       stateful: True
       plugin: "nav2_controller::SimpleGoalChecker"
-      xy_goal_tolerance: 0.25
-      yaw_goal_tolerance: 0.25
+      xy_goal_tolerance: 0.4
+      yaw_goal_tolerance: 0.5
     # DWB parameters - Optimized for dynamic obstacle avoidance
     FollowPath:
       plugin: "dwb_core::DWBLocalPlanner"
       debug_trajectory_details: False
       min_vel_x: 0.0
       min_vel_y: 0.0
-      max_vel_x: 1.0
+      max_vel_x: 2.0
       max_vel_y: 0.0
-      max_vel_theta: 1.5
+      max_vel_theta: 2.0
       min_speed_xy: 0.0
-      max_speed_xy: 1.0
+      max_speed_xy: 2.0
       min_speed_theta: 0.0
       # Responsive acceleration for dynamic obstacles
       acc_lim_x: 2.5
@@ -166,22 +166,22 @@ controller_server:
       linear_granularity: 0.1
       angular_granularity: 0.1
       transform_tolerance: 0.2
-      xy_goal_tolerance: 0.25
-      yaw_goal_tolerance: 0.25
+      xy_goal_tolerance: 0.4
+      yaw_goal_tolerance: 0.5
       trans_stopped_velocity: 0.25
       short_circuit_trajectory_evaluation: True
       stateful: True
       # Enhanced critics for dynamic obstacle avoidance
       critics: ["RotateToGoal", "Oscillation", "BaseObstacle", "GoalAlign", "PathAlign", "PathDist", "GoalDist"]
-      # Higher obstacle avoidance weight
-      BaseObstacle.scale: 0.1
-      PathAlign.scale: 32.0
+      # Balanced obstacle avoidance - allows close approach to goals
+      BaseObstacle.scale: 0.02
+      PathAlign.scale: 24.0
       PathAlign.forward_point_distance: 0.1
-      GoalAlign.scale: 24.0
+      GoalAlign.scale: 32.0
       GoalAlign.forward_point_distance: 0.1
-      PathDist.scale: 32.0
-      GoalDist.scale: 24.0
-      RotateToGoal.scale: 32.0
+      PathDist.scale: 24.0
+      GoalDist.scale: 48.0
+      RotateToGoal.scale: 24.0
       RotateToGoal.xy_goal_tolerance: 0.5
       RotateToGoal.slowing_factor: 5.0
       RotateToGoal.lookahead_time: -1.0
@@ -197,15 +197,16 @@ local_costmap:
       rolling_window: true
       width: 20
       height: 20
-      resolution: 0.05 
-      footprint: "[ [0.5, 0.5], [0.5, -0.5], [-0.5, -0.5], [-0.5, 0.5] ]"
+      resolution: 0.05
+      # Accurate Husky footprint: 0.99m x 0.57m + small safety margin
+      footprint: "[ [0.55, 0.35], [0.55, -0.35], [-0.55, -0.35], [-0.55, 0.35] ]"
       # Add transform tolerance to handle timing issues
       transform_tolerance: 0.5
       plugins: ["obstacle_layer", "inflation_layer"]
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
         cost_scaling_factor: 3.0
-        inflation_radius: 2.0
+        inflation_radius: 1.2
       obstacle_layer:
         plugin: "nav2_costmap_2d::ObstacleLayer"
         enabled: True
@@ -238,7 +239,8 @@ global_costmap:
       global_frame: map
       robot_base_frame: base_link
       use_sim_time: True
-      footprint: "[ [0.5, 0.5], [0.5, -0.5], [-0.5, -0.5], [-0.5, 0.5] ]"
+      # Accurate Husky footprint: 0.99m x 0.57m + small safety margin
+      footprint: "[ [0.55, 0.35], [0.55, -0.35], [-0.55, -0.35], [-0.55, 0.35] ]"
       # Use slightly coarser resolution to reduce memory usage and improve bounds handling
       resolution: 0.05
       track_unknown_space: true
@@ -277,7 +279,7 @@ global_costmap:
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
         cost_scaling_factor: 3.0
-        inflation_radius: 2.0
+        inflation_radius: 1.2
       always_send_full_costmap: True
 
 map_server:
@@ -363,10 +365,10 @@ velocity_smoother:
     smoothing_frequency: 20.0
     scale_velocities: False
     feedback: "OPEN_LOOP"
-    max_velocity: [1.0, 0.0, 1.5]
-    min_velocity: [-1.0, 0.0, -1.5]
-    max_accel: [2.5, 0.0, 3.2]
-    max_decel: [-2.5, 0.0, -3.2]
+    max_velocity: [2.0, 0.0, 2.0]
+    min_velocity: [-2.0, 0.0, -2.0]
+    max_accel: [3.0, 0.0, 3.5]
+    max_decel: [-3.0, 0.0, -3.5]
     odom_topic: "/husky/odometry"
     odom_duration: 0.1
     deadband_velocity: [0.0, 0.0, 0.0]
