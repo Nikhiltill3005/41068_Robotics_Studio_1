@@ -144,11 +144,11 @@ controller_server:
       debug_trajectory_details: False
       min_vel_x: 0.0
       min_vel_y: 0.0
-      max_vel_x: 1.0
+      max_vel_x: 1.25
       max_vel_y: 0.0
-      max_vel_theta: 1.5
+      max_vel_theta: 1.875
       min_speed_xy: 0.0
-      max_speed_xy: 1.0
+      max_speed_xy: 1.25
       min_speed_theta: 0.0
       # Responsive acceleration for dynamic obstacles
       acc_lim_x: 2.5
@@ -363,8 +363,8 @@ velocity_smoother:
     smoothing_frequency: 20.0
     scale_velocities: False
     feedback: "OPEN_LOOP"
-    max_velocity: [1.0, 0.0, 1.5]
-    min_velocity: [-1.0, 0.0, -1.5]
+    max_velocity: [1.25, 0.0, 1.875]
+    min_velocity: [-1.25, 0.0, -1.875]
     max_accel: [2.5, 0.0, 3.2]
     max_decel: [-2.5, 0.0, -3.2]
     odom_topic: "/husky/odometry"
