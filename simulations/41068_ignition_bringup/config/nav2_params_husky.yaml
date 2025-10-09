@@ -195,10 +195,12 @@ local_costmap:
       robot_base_frame: base_link
       use_sim_time: True
       rolling_window: true
-      width: 15
-      height: 15
+      width: 20
+      height: 20
       resolution: 0.05 
       footprint: "[ [0.5, 0.5], [0.5, -0.5], [-0.5, -0.5], [-0.5, 0.5] ]"
+      # Add transform tolerance to handle timing issues
+      transform_tolerance: 0.5
       plugins: ["obstacle_layer", "inflation_layer"]
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
@@ -214,10 +216,15 @@ local_costmap:
           clearing: True
           marking: True
           data_type: "LaserScan"
-          raytrace_max_range: 20.0
-          raytrace_min_range: 0.0
-          obstacle_max_range: 10.0
-          obstacle_min_range: 0.0
+          raytrace_max_range: 15.0
+          raytrace_min_range: 0.1
+          obstacle_max_range: 8.0
+          obstacle_min_range: 0.1
+          # Add sensor frame to help with transforms
+          sensor_frame: ""
+          # Increase clearing threshold to be more robust
+          clearing_threshold: 2
+          marking_threshold: 0
       static_layer:
         plugin: "nav2_costmap_2d::StaticLayer"
         map_subscribe_transient_local: True
@@ -232,9 +239,17 @@ global_costmap:
       robot_base_frame: base_link
       use_sim_time: True
       footprint: "[ [0.5, 0.5], [0.5, -0.5], [-0.5, -0.5], [-0.5, 0.5] ]"
-      # align global grid with SLAM for finer obstacle representation
-      resolution: 0.03
+      # Use slightly coarser resolution to reduce memory usage and improve bounds handling
+      resolution: 0.05
       track_unknown_space: true
+      # Set initial map size and allow dynamic expansion
+      width: 400
+      height: 400
+      origin_x: -10.0
+      origin_y: -10.0
+      rolling_window: false
+      # Add transform tolerance to handle timing issues
+      transform_tolerance: 0.5
       plugins: ["static_layer", "obstacle_layer", "inflation_layer"]
       static_layer:
         plugin: "nav2_costmap_2d::StaticLayer"
@@ -250,10 +265,15 @@ global_costmap:
           clearing: True
           marking: True
           data_type: "LaserScan"
-          raytrace_max_range: 20.0
-          raytrace_min_range: 0.0
-          obstacle_max_range: 10.0
-          obstacle_min_range: 0.0
+          raytrace_max_range: 15.0
+          raytrace_min_range: 0.1
+          obstacle_max_range: 8.0
+          obstacle_min_range: 0.1
+          # Add sensor frame to help with transforms
+          sensor_frame: ""
+          # Increase clearing threshold to be more robust
+          clearing_threshold: 2
+          marking_threshold: 0
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
         cost_scaling_factor: 3.0

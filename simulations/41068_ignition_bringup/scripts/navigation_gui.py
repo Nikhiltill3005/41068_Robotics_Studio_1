@@ -29,6 +29,7 @@ import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.figure import Figure
 import matplotlib.patches as patches
+from matplotlib.ticker import NullLocator
 
 
 class NavigationGUI(Node):
@@ -330,35 +331,44 @@ class NavigationGUI(Node):
     
     def update_map_display(self):
         """Update map display"""
-        if self.map_data is not None and hasattr(self, 'ax'):
-            # Clear previous map
-            self.ax.clear()
-            
-            # Display occupancy grid
-            # Convert occupancy grid to image (0=free, 100=occupied, -1=unknown)
-            map_img = np.zeros_like(self.map_data, dtype=np.uint8)
-            map_img[self.map_data == -1] = 128  # Unknown = gray
-            map_img[self.map_data == 0] = 255   # Free = white
-            map_img[self.map_data > 50] = 0     # Occupied = black
-            
-            # Calculate map bounds in world coordinates
-            x_min = self.map_origin_x
-            x_max = self.map_origin_x + self.map_width * self.map_resolution
-            y_min = self.map_origin_y
-            y_max = self.map_origin_y + self.map_height * self.map_resolution
-            
-            # Display map
-            self.ax.imshow(map_img, extent=[x_min, x_max, y_min, y_max], 
-                          origin='lower', cmap='gray', alpha=0.8)
-            
-            # Update plot limits
-            self.ax.set_xlim(x_min, x_max)
-            self.ax.set_ylim(y_min, y_max)
-            
-            self.ax.set_title('SLAM Map')
-            self.ax.set_xlabel('X (m)')
-            self.ax.set_ylabel('Y (m)')
-            self.ax.grid(True, alpha=0.3)
+        try:
+            if self.map_data is not None and hasattr(self, 'ax'):
+                # Clear previous map
+                self.ax.clear()
+                
+                # Display occupancy grid
+                # Convert occupancy grid to image (0=free, 100=occupied, -1=unknown)
+                map_img = np.zeros_like(self.map_data, dtype=np.uint8)
+                map_img[self.map_data == -1] = 128  # Unknown = gray
+                map_img[self.map_data == 0] = 255   # Free = white
+                map_img[self.map_data > 50] = 0     # Occupied = black
+                
+                # Calculate map bounds in world coordinates
+                x_min = self.map_origin_x
+                x_max = self.map_origin_x + self.map_width * self.map_resolution
+                y_min = self.map_origin_y
+                y_max = self.map_origin_y + self.map_height * self.map_resolution
+                
+                # Display map
+                self.ax.imshow(map_img, extent=[x_min, x_max, y_min, y_max], 
+                              origin='lower', cmap='gray', alpha=0.8)
+                
+                # Update plot limits with some padding
+                padding = max(1.0, (x_max - x_min) * 0.1)  # 10% padding or 1m minimum
+                self.ax.set_xlim(x_min - padding, x_max + padding)
+                self.ax.set_ylim(y_min - padding, y_max + padding)
+                
+                self.ax.set_title('SLAM Map')
+                self.ax.set_xlabel('X (m)')
+                self.ax.set_ylabel('Y (m)')
+                self.ax.grid(True, alpha=0.3)
+                
+                # Ensure we have proper tick configuration to avoid IndexError
+                self.ax.xaxis.set_minor_locator(NullLocator())
+                self.ax.yaxis.set_minor_locator(NullLocator())
+        except Exception as e:
+            # Log error but don't crash the GUI
+            self.get_logger().warn(f'Error updating map display: {e}')
         
         # Update robot position
         if hasattr(self, 'robot_marker'):
@@ -389,7 +399,10 @@ class NavigationGUI(Node):
                                           'g*', markersize=15, label='Goal')[0]
         
         if hasattr(self, 'canvas'):
-            self.canvas.draw()
+            try:
+                self.canvas.draw()
+            except Exception as e:
+                self.get_logger().warn(f'Error drawing canvas: {e}')
     
     def update_gui(self):
         """Periodic GUI update"""
