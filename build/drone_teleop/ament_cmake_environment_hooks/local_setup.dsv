@@ -1,0 +1,2 @@
+source;share/drone_teleop/environment/ament_prefix_path.sh
+source;share/drone_teleop/environment/path.sh
