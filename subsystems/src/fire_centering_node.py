@@ -30,7 +30,7 @@ class FireScanNode(Node):
         
         # Control parameters
         self.declare_parameter('enabled', True)
-        self.declare_parameter('scan_speed', 2.5)  # Reduced from 3.5 for smoother motion
+        self.declare_parameter('scan_speed', 3.0)  # Increased from 2.5 since we're not stopping
         self.declare_parameter('target_height', 14.0)
         self.declare_parameter('height_tolerance', 0.5)
         self.declare_parameter('auto_search', False)  # Start search automatically or wait for trigger
@@ -43,7 +43,7 @@ class FireScanNode(Node):
         
         # Search pattern parameters
         self.declare_parameter('search_grid_spacing', 10.0)
-        self.declare_parameter('search_hold_time', 2.0)
+        self.declare_parameter('search_area_size', 50.0)  # Size of search area (50x50m)
         
         # Read parameters
         self.enabled = self.get_parameter('enabled').value
@@ -58,19 +58,18 @@ class FireScanNode(Node):
         self.max_fire_area = self.get_parameter('max_fire_area').value
         
         self.search_grid_spacing = self.get_parameter('search_grid_spacing').value
-        self.search_hold_time = self.get_parameter('search_hold_time').value
+        self.search_area_size = self.get_parameter('search_area_size').value
         
         # SIMPLIFIED STATE: just SCAN
         self.drone_position = None
         self.drone_orientation = None
         self.search_waypoints = []
         self.current_waypoint = 0
-        self.waypoint_arrival_time = None
         self.search_active = self.auto_search  # Only search if auto_search enabled
         
         # Fire logging - much simpler
         self.detected_fires = []  # List of world positions
-        self.duplicate_threshold = 15.0  # Increased threshold to prevent multiple detections of same fire
+        self.duplicate_threshold = 1.2  # Increased threshold to prevent multiple detections of same fire
         
         # Publishers
         self.cmd_vel_pub = self.create_publisher(Twist, '/drone/cmd_vel', 10)
@@ -93,10 +92,12 @@ class FireScanNode(Node):
         
         self.get_logger().info(f'Fire Scan Node started')
         self.get_logger().info(f'Target height: {self.target_height}m, Scan speed: {self.scan_speed}m/s')
-        self.get_logger().info(f'Grid spacing: {self.search_grid_spacing}m, Fire detection threshold: {self.brightness_threshold}')
+        self.get_logger().info(f'Search area: {self.search_area_size}x{self.search_area_size}m, Grid spacing: {self.search_grid_spacing}m')
+        self.get_logger().info(f'Fire detection threshold: {self.brightness_threshold}')
         self.get_logger().info(f'Performance: Debug images every {self.debug_image_rate} frames, fire detection every 3 frames')
         self.get_logger().info('Publishing all fire positions to: /drone/fire_scan/fire_positions')
         self.get_logger().info('Publishing debug images to: /drone/fire_scan/debug_image')
+        self.get_logger().info('Search pattern: Continuous zigzag (no stopping at waypoints)')
         if self.auto_search:
             self.get_logger().info('Auto-search ENABLED - will start searching automatically')
         else:
@@ -106,11 +107,10 @@ class FireScanNode(Node):
         """Toggle search pattern execution"""
         if msg.data and not self.search_active:
             self.search_active = True
-            self.get_logger().info('SEARCH ACTIVATED - Starting search pattern')
+            self.get_logger().info('SEARCH ACTIVATED - Starting continuous zigzag pattern')
             # Reset to beginning if already completed
             if self.current_waypoint >= len(self.search_waypoints):
                 self.current_waypoint = 0
-                self.waypoint_arrival_time = None
         elif not msg.data and self.search_active:
             self.search_active = False
             self.get_logger().info('SEARCH PAUSED - Debug visualization continues')
@@ -239,7 +239,7 @@ class FireScanNode(Node):
         self.cmd_vel_pub.publish(cmd)
 
     def execute_search_pattern(self):
-        """Navigate through search waypoints"""
+        """Navigate through search waypoints continuously without stopping"""
         cmd = Twist()
         
         if self.current_waypoint >= len(self.search_waypoints):
@@ -253,31 +253,23 @@ class FireScanNode(Node):
         dy = target_y - self.drone_position.y
         distance = math.sqrt(dx**2 + dy**2)
         
-        if distance < 2.0:  # Reached waypoint
-            current_time = self.get_clock().now()
-            if self.waypoint_arrival_time is None:
-                self.waypoint_arrival_time = current_time
-                self.get_logger().info(f"Reached waypoint {self.current_waypoint + 1}/{len(self.search_waypoints)} - scanning...")
-            
-            # Hold at waypoint for scanning
-            hold_duration = (current_time - self.waypoint_arrival_time).nanoseconds / 1e9
-            if hold_duration > self.search_hold_time:
-                # Move to next waypoint
-                self.current_waypoint += 1
-                self.waypoint_arrival_time = None
-                if self.current_waypoint < len(self.search_waypoints):
-                    self.get_logger().info(f"Moving to waypoint {self.current_waypoint + 1}/{len(self.search_waypoints)}")
-        else:
-            # Smooth velocity control with proportional gain
-            # Velocity reduces as we get closer to waypoint
-            speed_factor = min(1.0, distance / 5.0)  # Slow down within 5m
-            cmd.linear.x = (dx / distance) * self.scan_speed * speed_factor
-            cmd.linear.y = (dy / distance) * self.scan_speed * speed_factor
-            
-            # Apply velocity limits (reduced for smoother motion)
-            max_vel = 1.5
-            cmd.linear.x = max(-max_vel, min(max_vel, cmd.linear.x))
-            cmd.linear.y = max(-max_vel, min(max_vel, cmd.linear.y))
+        # Move to next waypoint when close (no stopping)
+        if distance < 1.0:  # Reduced threshold since we're not stopping
+            self.current_waypoint += 1
+            if self.current_waypoint < len(self.search_waypoints):
+                self.get_logger().info(f"Waypoint {self.current_waypoint}/{len(self.search_waypoints)}")
+            return cmd
+        
+        # Smooth velocity control with proportional gain
+        # Velocity reduces as we get closer to waypoint for smooth transitions
+        speed_factor = min(1.0, distance / 3.0)  # Slow down within 3m for smooth turns
+        cmd.linear.x = (dx / distance) * self.scan_speed * speed_factor
+        cmd.linear.y = (dy / distance) * self.scan_speed * speed_factor
+        
+        # Apply velocity limits
+        max_vel = 2.0  # Slightly higher to accommodate faster scan speed
+        cmd.linear.x = max(-max_vel, min(max_vel, cmd.linear.x))
+        cmd.linear.y = max(-max_vel, min(max_vel, cmd.linear.y))
         
         return cmd
 
@@ -340,28 +332,32 @@ class FireScanNode(Node):
         return False
 
     def generate_search_pattern(self):
-        """Generate simple grid search pattern"""
+        """Generate continuous zigzag lawnmower search pattern"""
         if self.drone_position is None:
             return
-            
-        # Create waypoints in 50x50m area from -25 to +25
+        
+        # Create search area centered at origin
+        half_size = self.search_area_size / 2.0
+        
+        # Generate horizontal lines (switchbacks) based on grid spacing
+        x_points = list(range(int(-half_size), int(half_size) + 1, int(self.search_grid_spacing)))
+        
         waypoints = []
         
-        # Lawn mower pattern for systematic coverage
-        x_points = list(range(-25, 26, int(self.search_grid_spacing)))
-        y_points = list(range(-25, 26, int(self.search_grid_spacing)))
-        
+        # Create zigzag pattern: go across, step down, go back across
         for i, x in enumerate(x_points):
-            if i % 2 == 0:  # Even rows: bottom to top
-                for y in y_points:
-                    waypoints.append((float(x), float(y)))
-            else:  # Odd rows: top to bottom
-                for y in reversed(y_points):
-                    waypoints.append((float(x), float(y)))
+            if i % 2 == 0:  # Even rows: left to right
+                waypoints.append((float(x), -half_size))
+                waypoints.append((float(x), half_size))
+            else:  # Odd rows: right to left
+                waypoints.append((float(x), half_size))
+                waypoints.append((float(x), -half_size))
         
         self.search_waypoints = waypoints
         self.current_waypoint = 0
-        self.get_logger().info(f"Generated {len(waypoints)} search waypoints in lawn-mower pattern")
+        num_switchbacks = len(x_points)
+        self.get_logger().info(f"Generated continuous zigzag pattern: {num_switchbacks} switchbacks, {len(waypoints)} waypoints total")
+        self.get_logger().info(f"Search area: {self.search_area_size}x{self.search_area_size}m, spacing: {self.search_grid_spacing}m")
 
     def create_debug_image(self, original_image, fires_with_world_pos):
         """Create debug image with fire locations and world coordinates marked"""
