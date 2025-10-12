@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
+
 """
 Firefighting GUI - Extended
+
+Command to run GUI: python3 firefighting_gui_full.py 
+Camera feeds are locked at 320 x 400 px  (can adjust)
 
 Features:
 - Teleop mode toggle (manual/autonomous) (publishes to /control_mode)
@@ -15,6 +19,7 @@ Features:
 - Buttons: Clear paths, Toggle RViz publishing, Emergency Stop, Return Home
 - Topics are parameters (change via ROS2 param system)
 """
+
 import os
 import time
 import threading
@@ -34,7 +39,7 @@ from rclpy.parameter import Parameter
 
 from sensor_msgs.msg import Image as ROSImage
 from nav_msgs.msg import Odometry, Path
-from geometry_msgs.msg import PoseArray, PoseStamped
+from geometry_msgs.msg import PoseArray, PoseStamped, Twist
 from std_msgs.msg import String, Float32, Bool
 from cv_bridge import CvBridge
 
@@ -45,15 +50,16 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
 
 class FirefightingGUI(Node):
-    def __init__(self, root: tk.Tk):
+    #def __init__(self, root: tk.Tk):
+    def __init__(self, root):
         super().__init__('firefighting_gui_full')
+        self.root = root # Save reference to Tkinter root window
 
         # ---------- PARAMETERS (changeable) ----------
         # Topics (declared as ROS params so user can override)
-        self.declare_parameter('drone_rgb_topic', '/drone/camera/rgb/image_raw')
-        self.declare_parameter('drone_ir_topic', '/drone/camera/ir/image_raw')
-        self.declare_parameter('husky_rgb_topic', '/husky/camera/rgb/image_raw')
-        self.declare_parameter('husky_ir_topic', '/husky/camera/ir/image_raw')
+        self.declare_parameter('drone_rgb_topic', '/drone/fire_scan/debug_image')
+        self.declare_parameter('drone_ir_topic', '/drone/ir_camera/image_raw')
+        self.declare_parameter('husky_rgb_topic', '/husky/camera/image')
         self.declare_parameter('husky_odom_topic', '/husky/odometry')
         self.declare_parameter('drone_odom_topic', '/drone/odometry')
         self.declare_parameter('fire_topic', '/drone/fire_scan/fire_positions')
@@ -62,13 +68,15 @@ class FirefightingGUI(Node):
         self.declare_parameter('drone_batt_topic', '/drone/battery')
         self.declare_parameter('world_size', 50.0)
         self.declare_parameter('rviz_path_topic', '/visualization/path')
+        
+        self.declare_parameter('husky_cmdvel_topic', '/husky/cmd_vel')
+        self.declare_parameter('drone_cmdvel_topic', '/drone/cmd_vel')
 
         # Get parameter values
         self.topics = {
             'drone_rgb': self.get_parameter('drone_rgb_topic').get_parameter_value().string_value,
             'drone_ir': self.get_parameter('drone_ir_topic').get_parameter_value().string_value,
             'husky_rgb': self.get_parameter('husky_rgb_topic').get_parameter_value().string_value,
-            'husky_ir': self.get_parameter('husky_ir_topic').get_parameter_value().string_value,
             'husky_odom': self.get_parameter('husky_odom_topic').get_parameter_value().string_value,
             'drone_odom': self.get_parameter('drone_odom_topic').get_parameter_value().string_value,
             'fires': self.get_parameter('fire_topic').get_parameter_value().string_value,
@@ -76,12 +84,14 @@ class FirefightingGUI(Node):
             'husky_batt': self.get_parameter('husky_batt_topic').get_parameter_value().string_value,
             'drone_batt': self.get_parameter('drone_batt_topic').get_parameter_value().string_value,
             'rviz_path': self.get_parameter('rviz_path_topic').get_parameter_value().string_value,
+            'husky_cmdvel': self.get_parameter('husky_cmdvel_topic').get_parameter_value().string_value,
+            'drone_cmdvel': self.get_parameter('drone_cmdvel_topic').get_parameter_value().string_value,
         }
         self.world_size = self.get_parameter('world_size').get_parameter_value().double_value
 
         # ---------- Application state ----------
         self.bridge = CvBridge()
-        self.camera_queues = {k: queue.Queue(maxsize=1) for k in ['drone_rgb', 'drone_ir', 'husky_rgb', 'husky_ir']}
+        self.camera_queues = {k: queue.Queue(maxsize=1) for k in ['drone_rgb', 'drone_ir', 'husky_rgb']}
         self.camera_enabled = {k: True for k in self.camera_queues.keys()}
 
         # Positions and paths
@@ -97,6 +107,34 @@ class FirefightingGUI(Node):
         # Control mode publisher
         self.control_pub = self.create_publisher(String, self.topics['control_mode'], 10)
         self.current_mode = "autonomous"
+        self.path_pub = self.create_publisher(Path, '/visualization/path', 10)
+
+        # ---------------- TELEOP ADDITION START ----------------
+        # Publishers for manual teleoperation
+        self.teleop_pub_husky = self.create_publisher(Twist, self.topics['husky_cmdvel'], 10)
+        self.teleop_pub_drone = self.create_publisher(Twist, self.topics['drone_cmdvel'], 10)
+
+        # Teleop parameters
+        self.active_robot = 'drone'
+        self.key_state = set()
+        self.speed_normal = 0.5
+        self.speed_turbo = 1.2
+        self.angular_speed = 1.0
+        self.altitude_speed = 0.4
+
+        # bind key events
+        self.root.bind("<KeyPress>", self.on_key_press)
+        self.root.bind("<KeyRelease>", self.on_key_release)
+        self.teleop_timer = self.create_timer(0.1, self.update_teleop)
+        # ---------------- TELEOP ADDITION END ----------------
+
+        self.setup_gui()
+        self.root.after(100, self.gui_video_loop)
+        self.root.after(500, self.gui_map_loop)
+        self.root.after(1000, self.update_timer_display)
+
+        self.get_logger().info('Firefighting GUI initialised.')
+        # ---------------- TELEOP ADDITION END ----------------
 
         # Path publisher for RViz (optional)
         self.publish_rviz_path = False
@@ -108,7 +146,6 @@ class FirefightingGUI(Node):
         self.create_subscription(ROSImage, self.topics['drone_rgb'], lambda msg: self.image_cb(msg, 'drone_rgb'), 10)
         self.create_subscription(ROSImage, self.topics['drone_ir'], lambda msg: self.image_cb(msg, 'drone_ir'), 10)
         self.create_subscription(ROSImage, self.topics['husky_rgb'], lambda msg: self.image_cb(msg, 'husky_rgb'), 10)
-        self.create_subscription(ROSImage, self.topics['husky_ir'], lambda msg: self.image_cb(msg, 'husky_ir'), 10)
 
         # Odometry -> positions and path history
         self.create_subscription(Odometry, self.topics['husky_odom'], self.husky_odom_cb, 10)
@@ -126,14 +163,6 @@ class FirefightingGUI(Node):
         self.create_subscription(Bool, '/drone/obstacle', lambda m: self.obstacle_cb(m, 'drone'), 10)
 
         # ---------- GUI layout ----------
-        self.root = root
-        self.setup_gui()
-
-        # kick off video/map update loops
-        self.root.after(100, self.gui_video_loop)
-        self.root.after(500, self.gui_map_loop)
-        self.root.after(1000, self.update_timer_display)
-
         self.get_logger().info('Firefighting GUI initialized.')
         self.get_logger().info(f"Subscribed topics: {self.topics}")
 
@@ -196,7 +225,7 @@ class FirefightingGUI(Node):
 
     # -------------------- GUI / Widgets --------------------
     def setup_gui(self):
-        self.root.title("Firefighting Robot Control Center — Extended")
+        self.root.title("Firefighting Robot Control Center")
         self.root.geometry("1600x1000")
         style = ttk.Style()
         style.theme_use('clam')
@@ -207,6 +236,13 @@ class FirefightingGUI(Node):
         self.mode_btn = ttk.Button(topbar, text="Switch to MANUAL", command=self.toggle_mode)
         self.mode_btn.pack(side=tk.LEFT, padx=4)
         ttk.Button(topbar, text="Emergency STOP", command=self.emergency_stop).pack(side=tk.LEFT, padx=4)
+        
+        # ---------------- TELEOP ADDITION START ----------------
+        # Label to show which robot teleop is controlling
+        self.teleop_label = ttk.Label(topbar, text=f"Control: {self.active_robot.upper()}", foreground='white', background='#333')
+        self.teleop_label.pack(side=tk.LEFT, padx=10)
+        # ---------------- TELEOP ADDITION END ----------------
+        
         ttk.Button(topbar, text="Return Home", command=lambda: self.log("Return Home triggered")).pack(side=tk.LEFT, padx=4)
         ttk.Button(topbar, text="Clear Paths", command=self.clear_paths).pack(side=tk.LEFT, padx=4)
         self.rviz_toggle_btn = ttk.Button(topbar, text="Enable RViz Path Pub", command=self.toggle_rviz_publish)
@@ -226,26 +262,40 @@ class FirefightingGUI(Node):
         # Camera grid
         cam_frame = ttk.LabelFrame(middle, text="Camera Feeds", padding=6)
         cam_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        cam_frame.grid_rowconfigure(0, weight=1)
-        cam_frame.grid_rowconfigure(1, weight=1)
-        cam_frame.grid_columnconfigure(0, weight=1)
-        cam_frame.grid_columnconfigure(1, weight=1)
+        
+        # Disable auto-expansion so frames stay constant
+        for i in range(2):
+            cam_frame.grid_rowconfigure(i, weight=0)
+            cam_frame.grid_columnconfigure(i, weight=0)
 
         self.cam_labels = {}
-        cams = ['drone_rgb', 'drone_ir', 'husky_rgb', 'husky_ir']
+        cams = ['drone_rgb', 'drone_ir', 'husky_rgb']
         for idx, key in enumerate(cams):
             r = idx // 2
             c = idx % 2
-            lbl = tk.Label(cam_frame, text=f"Waiting for {key}", bg='black', fg='white')
-            lbl.grid(row=r, column=c, sticky='nsew', padx=4, pady=4)
+
+            # Fixed dimensions for camera preview boxes
+            CAM_W, CAM_H = 320, 240
+            lbl_frame = tk.Frame(cam_frame, width=CAM_W, height=CAM_H, bg='gray15')
+            lbl_frame.grid_propagate(False)  # prevent auto-resize to content
+            lbl_frame.grid(row=r, column=c, padx=6, pady=6)
+            lbl = tk.Label(lbl_frame,
+                text=f"Waiting for {key}",
+                bg='black',
+                fg='white',
+                width=CAM_W,
+                height=CAM_H,
+                anchor='center'
+            )
+            lbl.pack(fill=tk.BOTH, expand=True)
             self.cam_labels[key] = lbl
+
             # add toggle checkboxes
         chk_frame = ttk.Frame(cam_frame)
         chk_frame.grid(row=2, column=0, columnspan=2, sticky='ew', pady=(4,0))
         for key in cams:
             var = tk.BooleanVar(value=True)
-            chk = ttk.Checkbutton(chk_frame, text=f"{key}", variable=var,
-                                  command=lambda k=key, v=var: self.toggle_camera(k, v.get()))
+            chk = ttk.Checkbutton(chk_frame, text=f"{key}", variable=var, command=lambda k=key, v=var: self.toggle_camera(k, v.get()))
             chk.pack(side=tk.LEFT, padx=6)
             # store var for future reference
             setattr(self, f"{key}_enabled_var", var)
@@ -301,6 +351,54 @@ class FirefightingGUI(Node):
         log_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
         self.log_box = scrolledtext.ScrolledText(log_frame, height=8, state='disabled')
         self.log_box.pack(fill=tk.BOTH, expand=True)
+
+    # ---------------- TELEOP ADDITION START ----------------
+    def on_key_press(self, event):
+        key = event.keysym.lower()
+        self.key_state.add(key)
+
+        if key == 'tab':
+            self.active_robot = 'husky' if self.active_robot == 'drone' else 'drone'
+            self.teleop_label.config(text=f"Control: {self.active_robot.upper()}")
+            self.log(f"[Teleop] Switched control to {self.active_robot.upper()}")
+        elif key == 'space':
+            self.stop_movement()
+
+    def on_key_release(self, event):
+        key = event.keysym.lower()
+        if key in self.key_state:
+            self.key_state.remove(key)
+
+    def update_teleop(self):
+        if not self.key_state:
+            return
+        twist = Twist()
+        speed = self.speed_turbo if 'shift_l' in self.key_state or 'shift_r' in self.key_state else self.speed_normal
+
+        if self.active_robot == 'husky':
+            if 'w' in self.key_state: twist.linear.x += speed
+            if 's' in self.key_state: twist.linear.x -= speed
+            if 'a' in self.key_state: twist.angular.z += self.angular_speed
+            if 'd' in self.key_state: twist.angular.z -= self.angular_speed
+            self.teleop_pub_husky.publish(twist)
+
+        elif self.active_robot == 'drone':
+            if 'w' in self.key_state: twist.linear.x += speed
+            if 's' in self.key_state: twist.linear.x -= speed
+            if 'a' in self.key_state: twist.linear.y += speed
+            if 'd' in self.key_state: twist.linear.y -= speed
+            if 'q' in self.key_state: twist.angular.z += self.angular_speed
+            if 'e' in self.key_state: twist.angular.z -= self.angular_speed
+            if 'r' in self.key_state: twist.linear.z += self.altitude_speed
+            if 'f' in self.key_state: twist.linear.z -= self.altitude_speed
+            self.teleop_pub_drone.publish(twist)
+
+    def stop_movement(self):
+        self.teleop_pub_husky.publish(Twist())
+        self.teleop_pub_drone.publish(Twist())
+        self.log("[Teleop] Emergency STOP issued!")
+    # ---------------- TELEOP ADDITION END ----------------
+
 
     # ---------------- UI HELPERS ----------------
     def toggle_camera(self, key: str, enabled: bool):
@@ -371,9 +469,7 @@ class FirefightingGUI(Node):
                 continue
             try:
                 frame = self.camera_queues[key].get_nowait()
-                # resize to label size (keep aspect)
-                w = max(200, lbl.winfo_width() or 320)
-                h = max(150, lbl.winfo_height() or 240)
+                w, h = 320, 240  # match CAM_W and CAM_H used in setup_gui()
                 h0, w0 = frame.shape[:2]
                 scale = min(w / w0, h / h0)
                 new_w, new_h = int(w0 * scale), int(h0 * scale)
