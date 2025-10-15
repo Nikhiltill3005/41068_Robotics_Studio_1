@@ -396,6 +396,16 @@
       
       <static>true</static>
     </include>
+
+
+    <include>
+      <uri>model://MaleVisitorOnPhone</uri>
+      <name>human</name>
+      <pose>0 0 0 0 0.05 1.91</pose>
+      
+      <static>true</static>
+    </include>
+    
     
     
     <include>
