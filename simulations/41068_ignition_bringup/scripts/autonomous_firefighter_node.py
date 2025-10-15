@@ -3,10 +3,12 @@
 Autonomous Firefighter Node for Husky Robot
 
 This node implements a state machine that:
+- Scans for test_fire entities in the world at startup
 - Subscribes to fire locations from the overhead drone
 - Autonomously navigates to each fire location
 - Approaches fires to within 1.5m
 - Extinguishes fires with particle animation
+- Deletes fire entities from the simulation
 - Handles dynamic fire list that populates over time
 
 States:
@@ -32,6 +34,9 @@ from visualization_msgs.msg import Marker, MarkerArray
 import math
 from enum import Enum
 import time
+import re
+import subprocess
+import json
 
 
 class FirefighterState(Enum):
@@ -57,6 +62,7 @@ class AutonomousFirefighter(Node):
         self.declare_parameter('stuck_timeout', 8.0)  # Time stuck before giving up (seconds)
         self.declare_parameter('stuck_velocity_threshold', 0.05)  # Velocity threshold for stuck detection (m/s)
         self.declare_parameter('fallback_distance', 2.5)  # Distance to fire to consider "close enough" (meters)
+        self.declare_parameter('fire_match_tolerance', 1.0)  # Distance tolerance for matching fire positions (meters)
 
         self.target_distance = self.get_parameter('target_distance').value
         self.distance_tolerance = self.get_parameter('distance_tolerance').value
@@ -66,6 +72,7 @@ class AutonomousFirefighter(Node):
         self.stuck_timeout = self.get_parameter('stuck_timeout').value
         self.stuck_velocity_threshold = self.get_parameter('stuck_velocity_threshold').value
         self.fallback_distance = self.get_parameter('fallback_distance').value
+        self.fire_match_tolerance = self.get_parameter('fire_match_tolerance').value
 
         # State machine
         self.state = FirefighterState.IDLE
@@ -76,6 +83,9 @@ class AutonomousFirefighter(Node):
         self.extinguished_fires = []  # List of extinguished fire positions
         self.current_target_fire = None
         self.fire_queue = []  # Ordered list of fires to visit
+
+        # Fire entity tracking (name -> position mapping)
+        self.fire_entities = {}  # {name: (x, y, z)}
 
         # Robot state
         self.robot_position = None
@@ -134,7 +144,196 @@ class AutonomousFirefighter(Node):
         self.get_logger().info(f'Target distance: {self.target_distance}m')
         self.get_logger().info(f'Extinguish duration: {self.extinguish_duration}s')
         self.get_logger().info(f'Auto-start: {self.auto_start}')
+        
+        # Scan world for fire entities
+        self.scan_world_for_fires()
+        
         self.get_logger().info('Waiting for fire locations from drone...')
+
+    def scan_world_for_fires(self):
+        """Scan the world for test_fire entities and store their positions using ign service"""
+        self.get_logger().info('=== Scanning world for fire entities ===')
+        
+        try:
+            # Call ign service to get scene info
+            cmd = [
+                'ign', 'service',
+                '-s', '/world/bushland_world/scene/info',
+                '--reqtype', 'ignition.msgs.Empty',
+                '--reptype', 'ignition.msgs.Scene',
+                '--timeout', '5000',
+                '--req', ''
+            ]
+            
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+            
+            if result.returncode != 0:
+                self.get_logger().error(f'Failed to get scene info, return code: {result.returncode}')
+                self.get_logger().warn('Fire entities will not be deleted from simulation.')
+                return
+            
+            output = result.stdout
+            
+            # Pattern to match test_fire with or without numbers
+            fire_pattern = re.compile(r'test_fire\d*')
+            
+            # Find all unique fire names
+            fire_names = list(set(fire_pattern.findall(output)))
+            
+            if not fire_names:
+                self.get_logger().warn('No test_fire entities found in scene info')
+                return
+            
+            self.get_logger().info(f'Found {len(fire_names)} fire entities')
+            
+            # Parse positions for each fire
+            for fire_name in fire_names:
+                # Find the model block for this fire
+                # Pattern: model { ... name: "fire_name" ... pose { position { x: ... y: ... z: ... } } }
+                model_pattern = re.compile(
+                    r'model\s*\{[^}]*?name:\s*"' + re.escape(fire_name) + r'"[^}]*?'
+                    r'pose\s*\{[^}]*?position\s*\{[^}]*?'
+                    r'x:\s*([-\d.]+)[^}]*?'
+                    r'y:\s*([-\d.]+)[^}]*?'
+                    r'(?:z:\s*([-\d.]+))?',
+                    re.DOTALL
+                )
+                
+                match = model_pattern.search(output)
+                
+                if match:
+                    x = float(match.group(1))
+                    y = float(match.group(2))
+                    z = float(match.group(3)) if match.group(3) else 0.0
+                    
+                    self.fire_entities[fire_name] = (x, y, z)
+                    self.get_logger().info(
+                        f'  {fire_name}: position ({x:.2f}, {y:.2f}, {z:.2f})'
+                    )
+                else:
+                    # Store with None position if we can't parse it
+                    self.fire_entities[fire_name] = None
+                    self.get_logger().warn(f'  {fire_name}: could not parse position')
+            
+            self.get_logger().info(f'=== Successfully registered {len(self.fire_entities)} fire entities ===')
+                
+        except subprocess.TimeoutExpired:
+            self.get_logger().error('Timeout while scanning for fires')
+            self.get_logger().warn('The ign service command timed out. Fire entities will not be deleted.')
+        except Exception as e:
+            self.get_logger().error(f'Error scanning for fires: {str(e)}')
+
+    def scan_fires_alternative(self):
+        """Alternative method: scan for fires by checking model names"""
+        try:
+            # Get list of topics to find fire models
+            cmd = ['ign', 'topic', '-l']
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
+            
+            fire_pattern = re.compile(r'test_fire\d+')
+            fire_names = fire_pattern.findall(result.stdout)
+            
+            if fire_names:
+                for name in set(fire_names):
+                    if name not in self.fire_entities:
+                        self.fire_entities[name] = None
+                        self.get_logger().info(f'  Found via topics: {name}')
+        except Exception as e:
+            self.get_logger().warn(f'Alternative scan method failed: {str(e)}')
+
+    def find_fire_entity_name(self, fire_position):
+        """Find the fire entity name that matches the given position"""
+        if not self.fire_entities:
+            self.get_logger().warn('No fire entities registered. Cannot match fire to entity.')
+            return None
+        
+        # If we have positions stored, use distance matching
+        closest_name = None
+        closest_dist = float('inf')
+        
+        for name, pos in self.fire_entities.items():
+            if pos is None:
+                # No position stored yet, update it with current fire position
+                # and assume this is the fire we're looking for
+                self.fire_entities[name] = (fire_position.x, fire_position.y, fire_position.z)
+                self.get_logger().info(
+                    f'Associated {name} with position '
+                    f'({fire_position.x:.2f}, {fire_position.y:.2f})'
+                )
+                return name
+            
+            # Calculate distance
+            dist = math.sqrt(
+                (fire_position.x - pos[0])**2 +
+                (fire_position.y - pos[1])**2
+            )
+            
+            if dist < closest_dist and dist < self.fire_match_tolerance:
+                closest_dist = dist
+                closest_name = name
+        
+        if closest_name:
+            self.get_logger().info(
+                f'Matched fire at ({fire_position.x:.2f}, {fire_position.y:.2f}) '
+                f'to entity "{closest_name}" (distance: {closest_dist:.2f}m)'
+            )
+        else:
+            # If no match found, try to find an unassociated fire entity
+            for name, pos in self.fire_entities.items():
+                if pos is None:
+                    self.fire_entities[name] = (fire_position.x, fire_position.y, fire_position.z)
+                    self.get_logger().info(
+                        f'Associated {name} with position '
+                        f'({fire_position.x:.2f}, {fire_position.y:.2f}) (no close match)'
+                    )
+                    return name
+            
+            self.get_logger().warn(
+                f'No fire entity found matching position '
+                f'({fire_position.x:.2f}, {fire_position.y:.2f}) '
+                f'within {self.fire_match_tolerance}m tolerance'
+            )
+        
+        return closest_name
+
+    def delete_fire_entity(self, fire_name):
+        """Delete a fire entity from the simulation using ign service"""
+        if not fire_name:
+            return False
+        
+        self.get_logger().info(f'Attempting to delete fire entity: {fire_name}')
+        
+        try:
+            # Call ign service to remove the entity
+            cmd = [
+                'ign', 'service',
+                '-s', '/world/bushland_world/remove',
+                '--reqtype', 'ignition.msgs.Entity',
+                '--reptype', 'ignition.msgs.Boolean',
+                '--req', f'name: "{fire_name}" type: 2',
+                '--timeout', '2000'
+            ]
+            
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
+            
+            if result.returncode == 0 and 'data: true' in result.stdout.lower():
+                self.get_logger().info(f'✓ Successfully deleted {fire_name} from simulation!')
+                # Remove from our tracking dictionary
+                if fire_name in self.fire_entities:
+                    del self.fire_entities[fire_name]
+                return True
+            else:
+                self.get_logger().error(f'✗ Failed to delete {fire_name} from simulation')
+                self.get_logger().error(f'  Output: {result.stdout}')
+                self.get_logger().error(f'  Error: {result.stderr}')
+                return False
+                
+        except subprocess.TimeoutExpired:
+            self.get_logger().error(f'Timeout while trying to delete {fire_name}')
+            return False
+        except Exception as e:
+            self.get_logger().error(f'Exception while deleting {fire_name}: {str(e)}')
+            return False
 
     def fire_callback(self, msg):
         """Update list of detected fires from drone"""
@@ -430,6 +629,13 @@ class AutonomousFirefighter(Node):
             self.get_logger().info(
                 f'Fire EXTINGUISHED! Total: {len(self.extinguished_fires)}'
             )
+
+            # Find and delete the fire entity from simulation
+            fire_name = self.find_fire_entity_name(self.current_target_fire.position)
+            if fire_name:
+                self.delete_fire_entity(fire_name)
+            else:
+                self.get_logger().warn('Could not find fire entity name to delete')
 
             # Reset extinguish timer
             self.extinguish_start_time = None
