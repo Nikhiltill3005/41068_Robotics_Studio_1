@@ -5,7 +5,9 @@ Firefighting GUI - Extended
 
 Command to run GUI: python3 firefighting_gui_full.py 
 Camera feeds are locked at 320 x 400 px  (can adjust)
+
 Press Tab key to switch between Drone and Husky teleop (not the display label in top menu)
+Using SHIFT + W/A/S/D results in faster movement 
 
 Features:
 - Teleop mode toggle (manual/autonomous) (publishes to /control_mode)
