@@ -5,6 +5,7 @@ Firefighting GUI - Extended
 
 Command to run GUI: python3 firefighting_gui_full.py 
 Camera feeds are locked at 320 x 400 px  (can adjust)
+Press Tab key to switch between Drone and Husky teleop (not the display label in top menu)
 
 Features:
 - Teleop mode toggle (manual/autonomous) (publishes to /control_mode)
@@ -227,130 +228,130 @@ class FirefightingGUI(Node):
     def setup_gui(self):
         self.root.title("Firefighting Robot Control Center")
         self.root.geometry("1600x1000")
-        style = ttk.Style()
-        style.theme_use('clam')
+        self.root.configure(bg="#f2f4f8")
 
-        # Top control bar
+        # ---------- Style ----------
+        style = ttk.Style()
+        style.theme_use("clam")
+        style.configure("TButton", font=("Segoe UI", 10), padding=6, background="#0078d7", foreground="white")
+        style.map("TButton", background=[("active", "#005a9e")])
+        style.configure("TLabel", background="#f2f4f8", foreground="#1e2a38", font=("Segoe UI", 10))
+        style.configure("TLabelframe", background="#ffffff", foreground="#1e2a38", padding=10)
+        style.configure("TLabelframe.Label", font=("Segoe UI", 11, "bold"))
+        style.configure("TCheckbutton", background="#ffffff", foreground="#1e2a38")
+
+        # ---------- Top Bar ----------
         topbar = ttk.Frame(self.root, padding=6)
-        topbar.pack(fill=tk.X)
-        self.mode_btn = ttk.Button(topbar, text="Switch to MANUAL", command=self.toggle_mode)
+        topbar.pack(fill=tk.X, pady=4)
+
+        self.mode_btn = tk.Button(
+            topbar, text="Switch to MANUAL", bg="#0078d7", fg="white",
+            font=("Segoe UI", 10, "bold"), relief="flat", padx=8, pady=4,
+            command=self.toggle_mode
+        )
         self.mode_btn.pack(side=tk.LEFT, padx=4)
-        ttk.Button(topbar, text="Emergency STOP", command=self.emergency_stop).pack(side=tk.LEFT, padx=4)
-        
-        # ---------------- TELEOP ADDITION START ----------------
-        # Label to show which robot teleop is controlling
-        self.teleop_label = ttk.Label(topbar, text=f"Control: {self.active_robot.upper()}", foreground='white', background='#333')
+
+        stop_btn = tk.Button(
+            topbar, text="EMERGENCY STOP", bg="#e81123", fg="white",
+            font=("Segoe UI", 10, "bold"), relief="flat", padx=8, pady=4,
+            command=self.emergency_stop
+        )
+        stop_btn.pack(side=tk.LEFT, padx=4)
+
+        self.teleop_label = tk.Label(topbar, text=f"Control: {self.active_robot.upper()}",
+                                    bg="#f2f4f8", fg="#1e2a38", font=("Segoe UI", 10))
         self.teleop_label.pack(side=tk.LEFT, padx=10)
-        # ---------------- TELEOP ADDITION END ----------------
-        
+
         ttk.Button(topbar, text="Return Home", command=lambda: self.log("Return Home triggered")).pack(side=tk.LEFT, padx=4)
         ttk.Button(topbar, text="Clear Paths", command=self.clear_paths).pack(side=tk.LEFT, padx=4)
         self.rviz_toggle_btn = ttk.Button(topbar, text="Enable RViz Path Pub", command=self.toggle_rviz_publish)
         self.rviz_toggle_btn.pack(side=tk.LEFT, padx=4)
         ttk.Button(topbar, text="Save Snapshot", command=self.save_snapshot).pack(side=tk.LEFT, padx=4)
 
-        # Timer and mission controls
         self.timer_label = ttk.Label(topbar, text="Mission Time: 00:00:00")
         self.timer_label.pack(side=tk.RIGHT, padx=8)
         self.system_time_label = ttk.Label(topbar, text=time.strftime("%Y-%m-%d %H:%M:%S"))
         self.system_time_label.pack(side=tk.RIGHT, padx=8)
 
-        # Middle split: cameras left (grid), map right
+        # ---------- Camera + Map ----------
         middle = ttk.Frame(self.root)
         middle.pack(fill=tk.BOTH, expand=True, padx=6, pady=6)
 
-        # Camera grid
-        cam_frame = ttk.LabelFrame(middle, text="Camera Feeds", padding=6)
-        cam_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        
-        # Disable auto-expansion so frames stay constant
-        for i in range(2):
-            cam_frame.grid_rowconfigure(i, weight=0)
-            cam_frame.grid_columnconfigure(i, weight=0)
+        cam_frame = ttk.LabelFrame(middle, text="Camera Feeds", padding=8)
+        cam_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 6))
 
         self.cam_labels = {}
-        cams = ['drone_rgb', 'drone_ir', 'husky_rgb']
+        cams = ["drone_rgb", "drone_ir", "husky_rgb"]
         for idx, key in enumerate(cams):
-            r = idx // 2
-            c = idx % 2
-
-            # Fixed dimensions for camera preview boxes
-            CAM_W, CAM_H = 320, 240
-            lbl_frame = tk.Frame(cam_frame, width=CAM_W, height=CAM_H, bg='gray15')
-            lbl_frame.grid_propagate(False)  # prevent auto-resize to content
-            lbl_frame.grid(row=r, column=c, padx=6, pady=6)
-            lbl = tk.Label(lbl_frame,
-                text=f"Waiting for {key}",
-                bg='black',
-                fg='white',
-                width=CAM_W,
-                height=CAM_H,
-                anchor='center'
-            )
+            lbl_frame = tk.Frame(cam_frame, width=320, height=240, bg="#e6e9ef", highlightbackground="#cccccc", highlightthickness=1)
+            lbl_frame.grid(row=idx // 2, column=idx % 2, padx=6, pady=6)
+            lbl_frame.grid_propagate(False)
+            lbl = tk.Label(lbl_frame, text=f"Waiting for {key}", bg="#e6e9ef", fg="#444", anchor="center")
             lbl.pack(fill=tk.BOTH, expand=True)
             self.cam_labels[key] = lbl
 
-            # add toggle checkboxes
+        # Checkbox row
         chk_frame = ttk.Frame(cam_frame)
-        chk_frame.grid(row=2, column=0, columnspan=2, sticky='ew', pady=(4,0))
+        chk_frame.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(6, 0))
         for key in cams:
             var = tk.BooleanVar(value=True)
             chk = ttk.Checkbutton(chk_frame, text=f"{key}", variable=var, command=lambda k=key, v=var: self.toggle_camera(k, v.get()))
             chk.pack(side=tk.LEFT, padx=6)
-            # store var for future reference
             setattr(self, f"{key}_enabled_var", var)
 
-        # Map area (Matplotlib)
-        map_frame = ttk.LabelFrame(middle, text="2D Map", padding=6)
+        # ---------- Map ----------
+        map_frame = ttk.LabelFrame(middle, text="2D Map", padding=8)
         map_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
-        self.fig, self.ax = plt.subplots(figsize=(6,6))
-        self.canvas = FigureCanvasTkAgg(self.fig, master=map_frame)
-        self.canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
-        self.ax.set_aspect('equal')
-        self.ax.grid(True, alpha=0.3)
+        self.fig, self.ax = plt.subplots(figsize=(7, 7))
+        self.fig.patch.set_facecolor("#ffffff")
+        self.ax.set_facecolor("#ffffff")
+        self.ax.grid(True, color="#cccccc", alpha=0.5)
         self.ax.set_xlim(-self.world_size/2, self.world_size/2)
         self.ax.set_ylim(-self.world_size/2, self.world_size/2)
-        self.ax.set_title("Map (meters)")
-        self.husky_marker, = self.ax.plot([], [], 'bs', markersize=10, label='Husky')
-        self.drone_marker, = self.ax.plot([], [], 'g^', markersize=10, label='Drone')
-        self.fire_scatter = self.ax.scatter([], [], c='r', s=80, label='Fire')
-        self.husky_path_line, = self.ax.plot([], [], '-', color='blue', linewidth=1, alpha=0.7)
-        self.drone_path_line, = self.ax.plot([], [], '-', color='green', linewidth=1, alpha=0.7)
-        self.ax.legend(loc='upper right')
+        self.ax.set_title("Map (meters)", color="#1e2a38", fontsize=11)
+        self.husky_marker, = self.ax.plot([], [], "bs", markersize=10, label="Husky Path")
+        self.drone_marker, = self.ax.plot([], [], "g^", markersize=10, label="Drone Path")
+        self.fire_scatter = self.ax.scatter([], [], c="r", s=80, label="Fire")
+        self.ax.legend(loc="upper right")
+        self.canvas = FigureCanvasTkAgg(self.fig, master=map_frame)
+        self.canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
 
-        # Bottom: status panels and log
+        # ---------- Bottom: Status + Log ----------
         bottom = ttk.Frame(self.root)
         bottom.pack(fill=tk.BOTH, expand=False, padx=6, pady=6)
 
-        # Left: metrics/status
         status_frame = ttk.LabelFrame(bottom, text="Status", padding=6)
-        status_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        # battery
-        self.husky_batt_var = tk.StringVar(value="H: N/A")
-        self.drone_batt_var = tk.StringVar(value="D: N/A")
-        ttk.Label(status_frame, textvariable=self.husky_batt_var).pack(anchor='w')
-        ttk.Label(status_frame, textvariable=self.drone_batt_var).pack(anchor='w')
-        # fire metrics
+        status_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 6))
+
+        ttk.Label(status_frame, text="Husky Battery").pack(anchor="w")
+        self.husky_batt_pb = ttk.Progressbar(status_frame, length=150, mode="determinate", maximum=100)
+        self.husky_batt_pb.pack(anchor="w", pady=2)
+        ttk.Label(status_frame, text="Drone Battery").pack(anchor="w", pady=(6, 0))
+        self.drone_batt_pb = ttk.Progressbar(status_frame, length=150, mode="determinate", maximum=100)
+        self.drone_batt_pb.pack(anchor="w", pady=2)
+
         self.fire_count_var = tk.StringVar(value="Fires: 0")
+        ttk.Label(status_frame, textvariable=self.fire_count_var).pack(anchor="w", pady=(8, 0))
         self.husky_nearest_var = tk.StringVar(value="H dist to nearest fire: N/A")
         self.drone_nearest_var = tk.StringVar(value="D dist to nearest fire: N/A")
-        ttk.Label(status_frame, textvariable=self.fire_count_var).pack(anchor='w', pady=(6,0))
-        ttk.Label(status_frame, textvariable=self.husky_nearest_var).pack(anchor='w')
-        ttk.Label(status_frame, textvariable=self.drone_nearest_var).pack(anchor='w')
-        # obstacles
+        ttk.Label(status_frame, textvariable=self.husky_nearest_var).pack(anchor="w")
+        ttk.Label(status_frame, textvariable=self.drone_nearest_var).pack(anchor="w")
+
         self.husky_obs_var = tk.StringVar(value="H obstacle: N/A")
         self.drone_obs_var = tk.StringVar(value="D obstacle: N/A")
-        ttk.Label(status_frame, textvariable=self.husky_obs_var).pack(anchor='w', pady=(6,0))
-        ttk.Label(status_frame, textvariable=self.drone_obs_var).pack(anchor='w')
-        # sensor health
-        self.sensor_health_var = tk.StringVar(value="Sensors: OK")
-        ttk.Label(status_frame, textvariable=self.sensor_health_var).pack(anchor='w', pady=(6,0))
+        ttk.Label(status_frame, textvariable=self.husky_obs_var).pack(anchor="w", pady=(6, 0))
+        ttk.Label(status_frame, textvariable=self.drone_obs_var).pack(anchor="w")
 
-        # Right: log
+        self.sensor_health_var = tk.StringVar(value="Sensors: OK")
+        ttk.Label(status_frame, textvariable=self.sensor_health_var).pack(anchor="w", pady=(8, 0))
+
+        # Mission log
         log_frame = ttk.LabelFrame(bottom, text="Mission Log", padding=6)
         log_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
-        self.log_box = scrolledtext.ScrolledText(log_frame, height=8, state='disabled')
+        self.log_box = scrolledtext.ScrolledText(log_frame, height=10, bg="#f7f9fb", fg="#1e2a38", font=("Consolas", 9))
         self.log_box.pack(fill=tk.BOTH, expand=True)
+        self.log_box.config(state="disabled")
+
 
     # ---------------- TELEOP ADDITION START ----------------
     def on_key_press(self, event):
@@ -415,7 +416,7 @@ class FirefightingGUI(Node):
         self.log(f"Control mode changed to {self.current_mode.upper()}")
 
     def emergency_stop(self):
-        # you may publish a proper stop command; here we log only
+        self.stop_movement()  # publishes zero Twist (acting as a stop command)
         self.log("EMERGENCY STOP triggered!")
 
     def clear_paths(self):
