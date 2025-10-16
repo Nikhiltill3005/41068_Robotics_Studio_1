@@ -183,7 +183,7 @@ def generate_launch_description():
 
     nav2_launch_arg = DeclareLaunchArgument(
         'nav2',
-        default_value='False',
+        default_value='True',
         description='Flag to launch Nav2 for Husky only'
     )
     ld.add_action(nav2_launch_arg)
@@ -216,7 +216,7 @@ def generate_launch_description():
 
     # Fire Search Pattern (drone namespace)
     fire_search = IncludeLaunchDescription(
-        PathJoinSubstitution([FindPackageShare('drone_teleop'), 'launch', 'drone_fire_search.launch.py']),
+        PathJoinSubstitution([FindPackageShare('drone_teleop'), 'launch', 'fire_centering.launch.py']),
         condition=IfCondition(LaunchConfiguration('fire_search'))
     )
     ld.add_action(fire_search)
