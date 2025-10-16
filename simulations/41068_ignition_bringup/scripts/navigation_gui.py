@@ -175,7 +175,27 @@ class NavigationGUI(Node):
         """Create the main GUI window"""
         self.root = tk.Tk()
         self.root.title("Husky Navigation Control")
-        self.root.geometry("800x600")
+        self.root.geometry("840x640")
+        # Forest green theme
+        BG = '#0f1f14'
+        PANEL = '#152a1d'
+        SURFACE = '#1b3a28'
+        TEXT = '#e6f4ea'
+        GRID = '#294a36'
+        ACCENT = '#2e7d32'
+        ACCENT_ACTIVE = '#1b5e20'
+        self.root.configure(bg=BG)
+        style = ttk.Style()
+        try:
+            style.theme_use('clam')
+        except Exception:
+            pass
+        style.configure('TFrame', background=BG)
+        style.configure('TLabelframe', background=PANEL, foreground=TEXT)
+        style.configure('TLabelframe.Label', background=PANEL, foreground=TEXT, font=('Arial', 11, 'bold'))
+        style.configure('TLabel', background=BG, foreground=TEXT)
+        style.configure('Accent.TButton', background=ACCENT, foreground=TEXT)
+        style.map('Accent.TButton', background=[('active', ACCENT_ACTIVE)])
         
         # Create main frames
         control_frame = ttk.Frame(self.root)
@@ -221,8 +241,8 @@ class NavigationGUI(Node):
         button_frame = ttk.Frame(goal_frame)
         button_frame.pack(fill=tk.X, pady=10)
         
-        ttk.Button(button_frame, text="Send Goal", command=self.on_send_goal).pack(side=tk.LEFT, padx=2)
-        ttk.Button(button_frame, text="Cancel Goal", command=self.on_cancel_goal).pack(side=tk.LEFT, padx=2)
+        ttk.Button(button_frame, text="Send Goal", command=self.on_send_goal, style='Accent.TButton').pack(side=tk.LEFT, padx=2)
+        ttk.Button(button_frame, text="Cancel Goal", command=self.on_cancel_goal, style='Accent.TButton').pack(side=tk.LEFT, padx=2)
         
         # Quick goals
         quick_frame = ttk.LabelFrame(control_frame, text="Quick Goals")
@@ -239,9 +259,13 @@ class NavigationGUI(Node):
         self.fig = Figure(figsize=(6, 6), dpi=100)
         self.ax = self.fig.add_subplot(111)
         self.ax.set_aspect('equal')
-        self.ax.set_title('Robot Map')
-        self.ax.set_xlabel('X (m)')
-        self.ax.set_ylabel('Y (m)')
+        self.ax.set_facecolor(SURFACE)
+        self.ax.set_title('Robot Map', color=TEXT)
+        self.ax.set_xlabel('X (m)', color=TEXT)
+        self.ax.set_ylabel('Y (m)', color=TEXT)
+        for spine in self.ax.spines.values():
+            spine.set_color(GRID)
+        self.ax.tick_params(colors=TEXT)
         
         self.canvas = FigureCanvasTkAgg(self.fig, map_frame)
         self.canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
@@ -252,13 +276,17 @@ class NavigationGUI(Node):
         # Initial map setup
         self.ax.set_xlim(-10, 10)
         self.ax.set_ylim(-10, 10)
-        self.ax.grid(True, alpha=0.3)
+        self.ax.grid(True, color=GRID, alpha=0.4)
         
         # Robot marker
-        self.robot_marker = self.ax.plot(0, 0, 'ro', markersize=8, label='Robot')[0]
+        self.robot_marker = self.ax.plot(0, 0, marker='o', color='#10b981', markersize=8, label='Robot')[0]
         self.goal_marker = None
         
-        self.ax.legend()
+        leg = self.ax.legend()
+        leg.get_frame().set_facecolor(PANEL)
+        leg.get_frame().set_edgecolor(GRID)
+        for t in leg.get_texts():
+            t.set_color(TEXT)
         self.canvas.draw()
         
         # Start GUI update timer

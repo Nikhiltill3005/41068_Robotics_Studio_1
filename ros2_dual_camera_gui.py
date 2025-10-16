@@ -78,13 +78,17 @@ class Ros2DualCameraGui(Node):
 
     # ---------------- UI -----------------
     def _build_layout(self) -> None:
-        # Colors to emulate index.html theme
-        BG = '#111827'            # gray-900
-        PANEL_BG = '#2d3748'      # smoke-gray
-        TEXT = '#e5e7eb'          # gray-200
-        DRONE = '#3b82f6'         # drone-blue
-        GROUND = '#10b981'        # ground-green
-        FIRE = '#ff4444'          # fire-red
+        # Forest green theme
+        BG = '#0f1f14'            # deep forest
+        PANEL_BG = '#152a1d'      # darker panel
+        SURFACE = '#1b3a28'       # card surface
+        TEXT = '#e6f4ea'          # light text
+        MUTED = '#b6d2c0'         # secondary text
+        ACCENT = '#2e7d32'        # primary accent
+        ACCENT_ACTIVE = '#1b5e20' # active state
+        DRONE = '#10b981'         # emerald for drone
+        GROUND = '#84cc16'        # lime for ground
+        FIRE = '#ff4444'          # fire red
 
         self.root.configure(bg=BG)
         style = ttk.Style()
@@ -96,8 +100,8 @@ class Ros2DualCameraGui(Node):
         style.configure('Panel.TFrame', background=PANEL_BG)
         style.configure('Dark.TLabel', background=BG, foreground=TEXT)
         style.configure('Panel.TLabel', background=PANEL_BG, foreground=TEXT)
-        style.configure('Accent.TButton', foreground=TEXT)
-        style.map('Accent.TButton', background=[('active', '#374151')])
+        style.configure('Accent.TButton', foreground=TEXT, background=ACCENT)
+        style.map('Accent.TButton', background=[('active', ACCENT_ACTIVE)])
 
         container = ttk.Frame(self.root, padding=12, style='Dark.TFrame')
         container.pack(fill=tk.BOTH, expand=True)
@@ -153,11 +157,11 @@ class Ros2DualCameraGui(Node):
         ttk.Label(map_header, text='🗺️ Fire Map (2D) - Placeholder', style='Panel.TLabel',
                   font=('Segoe UI', 12, 'bold')).pack(anchor=tk.W)
         # Empty canvas you can draw onto later
-        self.map_canvas = tk.Canvas(map_tab, bg='black', highlightthickness=0)
+        self.map_canvas = tk.Canvas(map_tab, bg=SURFACE, highlightthickness=0)
         self.map_canvas.grid(row=1, column=0, sticky='nsew', padx=10, pady=(0, 10))
         # Example frame border inside canvas region (visual placeholder)
-        self.map_canvas.create_rectangle(10, 10, 300, 200, outline=FIRE)
-        self.map_canvas.create_text(20, 20, anchor='nw', fill='white',
+        self.map_canvas.create_rectangle(10, 10, 300, 200, outline=DRONE)
+        self.map_canvas.create_text(20, 20, anchor='nw', fill=TEXT,
                                     text='Add your 2D world rendering here...')
 
     # ------------- ROS callbacks ---------

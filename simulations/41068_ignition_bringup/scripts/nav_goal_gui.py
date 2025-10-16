@@ -52,8 +52,27 @@ class NavGoalGUI(Node):
         """Setup the GUI components"""
         self.root = tk.Tk()
         self.root.title("Husky Navigation Goal Controller")
-        self.root.geometry("400x300")
+        self.root.geometry("420x320")
         self.root.resizable(False, False)
+        # Forest green theme
+        BG = '#0f1f14'
+        PANEL = '#152a1d'
+        SURFACE = '#1b3a28'
+        TEXT = '#e6f4ea'
+        ACCENT = '#2e7d32'
+        ACCENT_ACTIVE = '#1b5e20'
+        self.root.configure(bg=BG)
+        style = ttk.Style()
+        try:
+            style.theme_use('clam')
+        except Exception:
+            pass
+        style.configure('TFrame', background=BG)
+        style.configure('TLabelframe', background=PANEL, foreground=TEXT, padding=8)
+        style.configure('TLabelframe.Label', background=PANEL, foreground=TEXT, font=('Arial', 11, 'bold'))
+        style.configure('TLabel', background=BG, foreground=TEXT)
+        style.configure('Accent.TButton', background=ACCENT, foreground=TEXT)
+        style.map('Accent.TButton', background=[('active', ACCENT_ACTIVE)])
         
         # Main frame
         main_frame = ttk.Frame(self.root, padding="10")
@@ -97,7 +116,8 @@ class NavGoalGUI(Node):
         
         for i, (name, x, y, yaw) in enumerate(presets):
             btn = ttk.Button(preset_frame, text=name, 
-                           command=lambda x=x, y=y, yaw=yaw: self.set_preset(x, y, yaw))
+                           command=lambda x=x, y=y, yaw=yaw: self.set_preset(x, y, yaw),
+                           style='Accent.TButton')
             btn.grid(row=i//3, column=i%3, padx=2, pady=2, sticky=(tk.W, tk.E))
         
         # Control buttons
@@ -117,8 +137,7 @@ class NavGoalGUI(Node):
         
         # Status label
         self.status_var = tk.StringVar(value="Ready")
-        status_label = ttk.Label(main_frame, textvariable=self.status_var, 
-                                foreground="blue")
+        status_label = ttk.Label(main_frame, textvariable=self.status_var)
         status_label.grid(row=6, column=0, columnspan=2, pady=10)
         
         # Configure grid weights
