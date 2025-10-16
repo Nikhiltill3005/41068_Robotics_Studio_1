@@ -142,7 +142,7 @@ controller_server:
     FollowPath:
       plugin: "dwb_core::DWBLocalPlanner"
       debug_trajectory_details: False
-      min_vel_x: 0.0
+      min_vel_x: -1.5
       min_vel_y: 0.0
       max_vel_x: 1.5
       max_vel_y: 0.0
@@ -197,7 +197,7 @@ local_costmap:
       rolling_window: true
       width: 20
       height: 20
-      resolution: 0.05
+      resolution: 0.025
       # Accurate Husky footprint: 0.99m x 0.57m + small safety margin
       footprint: "[ [0.55, 0.35], [0.55, -0.35], [-0.55, -0.35], [-0.55, 0.35] ]"
       # Add transform tolerance to handle timing issues
@@ -217,12 +217,18 @@ local_costmap:
           clearing: True
           marking: True
           data_type: "LaserScan"
-          raytrace_max_range: 15.0
+          raytrace_max_range: 25.0
           raytrace_min_range: 0.1
-          obstacle_max_range: 8.0
+          obstacle_max_range: 12.0
           obstacle_min_range: 0.1
-          # Add sensor frame to help with transforms
-          sensor_frame: ""
+          # sensor_frame specifies the tf frame in which the data is published.
+          # You can set it to the frame_id from your LaserScan message, for example:
+          # - "base_laser" (common default for 2D lidar)
+          # - "base_scan"  (if your robot uses this name)
+          # - "lidar_link" (if lidar is mounted on a specific link)
+          # - "base_link"  (if the scan is published in robot base frame)
+          # If empty, the sensor_frame will be inferred from the LaserScan message's header.frame_id.
+          sensor_frame: "base_scan"
           # Increase clearing threshold to be more robust
           clearing_threshold: 2
           marking_threshold: 0
