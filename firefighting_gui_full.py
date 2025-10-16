@@ -230,24 +230,38 @@ class FirefightingGUI(Node):
     def setup_gui(self):
         self.root.title("Firefighting Robot Control Center")
         self.root.geometry("1600x1000")
-        self.root.configure(bg="#f2f4f8")
+        # Forest Green theme palette
+        forest_bg = "#0b1f0b"           # deep forest background
+        forest_panel = "#123a12"        # panel background
+        forest_accent = "#1a5d1a"       # primary accent
+        forest_accent_dark = "#134a13"  # accent hover/active
+        forest_border = "#2e7d32"       # borders and grid
+        text_primary = "#e6f4ea"        # main text
+        text_muted = "#b7d7c6"          # secondary text
+        self.root.configure(bg=forest_bg)
 
         # ---------- Style ----------
         style = ttk.Style()
         style.theme_use("clam")
-        style.configure("TButton", font=("Segoe UI", 10), padding=6, background="#0078d7", foreground="white")
-        style.map("TButton", background=[("active", "#005a9e")])
-        style.configure("TLabel", background="#f2f4f8", foreground="#1e2a38", font=("Segoe UI", 10))
-        style.configure("TLabelframe", background="#ffffff", foreground="#1e2a38", padding=10)
-        style.configure("TLabelframe.Label", font=("Segoe UI", 11, "bold"))
-        style.configure("TCheckbutton", background="#ffffff", foreground="#1e2a38")
+        # Core widget styles
+        style.configure("TButton", font=("Segoe UI", 10), padding=6, background=forest_accent, foreground="white")
+        style.map("TButton", background=[("active", forest_accent_dark)])
+        style.configure("TLabel", background=forest_bg, foreground=text_primary, font=("Segoe UI", 10))
+        style.configure("TLabelframe", background=forest_panel, foreground=text_primary, padding=10)
+        style.configure("TLabelframe.Label", font=("Segoe UI", 11, "bold"), background=forest_panel, foreground=text_primary)
+        style.configure("TCheckbutton", background=forest_panel, foreground=text_primary)
+        # Container frames
+        style.configure("Main.TFrame", background=forest_bg)
+        style.configure("Topbar.TFrame", background=forest_panel)
+        style.configure("Bottom.TFrame", background=forest_bg)
+        style.configure("Panel.TFrame", background=forest_panel)
 
         # ---------- Top Bar ----------
-        topbar = ttk.Frame(self.root, padding=6)
+        topbar = ttk.Frame(self.root, padding=6, style="Topbar.TFrame")
         topbar.pack(fill=tk.X, pady=4)
 
         self.mode_btn = tk.Button(
-            topbar, text="Switch to MANUAL", bg="#0078d7", fg="white",
+            topbar, text="Switch to MANUAL", bg=forest_accent, activebackground=forest_accent_dark, fg="white",
             font=("Segoe UI", 10, "bold"), relief="flat", padx=8, pady=4,
             command=self.toggle_mode
         )
@@ -261,7 +275,7 @@ class FirefightingGUI(Node):
         stop_btn.pack(side=tk.LEFT, padx=4)
 
         self.teleop_label = tk.Label(topbar, text=f"Control: {self.active_robot.upper()}",
-                                    bg="#f2f4f8", fg="#1e2a38", font=("Segoe UI", 10))
+                                    bg=forest_panel, fg=text_primary, font=("Segoe UI", 10))
         self.teleop_label.pack(side=tk.LEFT, padx=10)
 
         ttk.Button(topbar, text="Return Home", command=lambda: self.log("Return Home triggered")).pack(side=tk.LEFT, padx=4)
@@ -276,7 +290,7 @@ class FirefightingGUI(Node):
         self.system_time_label.pack(side=tk.RIGHT, padx=8)
 
         # ---------- Camera + Map ----------
-        middle = ttk.Frame(self.root)
+        middle = ttk.Frame(self.root, style="Main.TFrame")
         middle.pack(fill=tk.BOTH, expand=True, padx=6, pady=6)
 
         cam_frame = ttk.LabelFrame(middle, text="Camera Feeds", padding=8)
@@ -285,15 +299,15 @@ class FirefightingGUI(Node):
         self.cam_labels = {}
         cams = ["drone_rgb", "drone_ir", "husky_rgb"]
         for idx, key in enumerate(cams):
-            lbl_frame = tk.Frame(cam_frame, width=320, height=240, bg="#e6e9ef", highlightbackground="#cccccc", highlightthickness=1)
+            lbl_frame = tk.Frame(cam_frame, width=320, height=240, bg=forest_panel, highlightbackground=forest_border, highlightthickness=1)
             lbl_frame.grid(row=idx // 2, column=idx % 2, padx=6, pady=6)
             lbl_frame.grid_propagate(False)
-            lbl = tk.Label(lbl_frame, text=f"Waiting for {key}", bg="#e6e9ef", fg="#444", anchor="center")
+            lbl = tk.Label(lbl_frame, text=f"Waiting for {key}", bg=forest_bg, fg=text_muted, anchor="center")
             lbl.pack(fill=tk.BOTH, expand=True)
             self.cam_labels[key] = lbl
 
         # Checkbox row
-        chk_frame = ttk.Frame(cam_frame)
+        chk_frame = ttk.Frame(cam_frame, style="Panel.TFrame")
         chk_frame.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(6, 0))
         for key in cams:
             var = tk.BooleanVar(value=True)
@@ -305,21 +319,28 @@ class FirefightingGUI(Node):
         map_frame = ttk.LabelFrame(middle, text="2D Map", padding=8)
         map_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
         self.fig, self.ax = plt.subplots(figsize=(7, 7))
-        self.fig.patch.set_facecolor("#ffffff")
-        self.ax.set_facecolor("#ffffff")
-        self.ax.grid(True, color="#cccccc", alpha=0.5)
+        self.fig.patch.set_facecolor(forest_panel)
+        self.ax.set_facecolor(forest_bg)
+        self.ax.grid(True, color=forest_border, alpha=0.25)
         self.ax.set_xlim(-self.world_size/2, self.world_size/2)
         self.ax.set_ylim(-self.world_size/2, self.world_size/2)
-        self.ax.set_title("Map (meters)", color="#1e2a38", fontsize=11)
+        self.ax.set_title("Map (meters)", color=text_primary, fontsize=11)
         self.husky_marker, = self.ax.plot([], [], "bs", markersize=10, label="Husky Path")
         self.drone_marker, = self.ax.plot([], [], "g^", markersize=10, label="Drone Path")
         self.fire_scatter = self.ax.scatter([], [], c="r", s=80, label="Fire")
-        self.ax.legend(loc="upper right")
+        legend = self.ax.legend(loc="upper right")
+        try:
+            legend.get_frame().set_facecolor(forest_panel)
+            legend.get_frame().set_edgecolor(forest_border)
+            for t in legend.get_texts():
+                t.set_color(text_primary)
+        except Exception:
+            pass
         self.canvas = FigureCanvasTkAgg(self.fig, master=map_frame)
         self.canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
 
         # ---------- Bottom: Status + Log ----------
-        bottom = ttk.Frame(self.root)
+        bottom = ttk.Frame(self.root, style="Bottom.TFrame")
         bottom.pack(fill=tk.BOTH, expand=False, padx=6, pady=6)
 
         status_frame = ttk.LabelFrame(bottom, text="Status", padding=6)
@@ -350,7 +371,7 @@ class FirefightingGUI(Node):
         # Mission log
         log_frame = ttk.LabelFrame(bottom, text="Mission Log", padding=6)
         log_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
-        self.log_box = scrolledtext.ScrolledText(log_frame, height=10, bg="#f7f9fb", fg="#1e2a38", font=("Consolas", 9))
+        self.log_box = scrolledtext.ScrolledText(log_frame, height=10, bg="#081708", fg=text_primary, font=("Consolas", 9))
         self.log_box.pack(fill=tk.BOTH, expand=True)
         self.log_box.config(state="disabled")
 
@@ -468,7 +489,7 @@ class FirefightingGUI(Node):
         for key, lbl in self.cam_labels.items():
             if not self.camera_enabled.get(key, True):
                 # show placeholder
-                lbl.configure(text=f"{key} (disabled)", image='', bg='gray20')
+                lbl.configure(text=f"{key} (disabled)", image='', bg=forest_panel)
                 continue
             try:
                 frame = self.camera_queues[key].get_nowait()
@@ -497,10 +518,11 @@ class FirefightingGUI(Node):
     def gui_map_loop(self):
         # Update static elements (positions, paths, fires)
         self.ax.clear()
+        self.ax.set_facecolor(forest_bg)
         self.ax.set_xlim(-self.world_size/2, self.world_size/2)
         self.ax.set_ylim(-self.world_size/2, self.world_size/2)
-        self.ax.set_title("Map (meters)")
-        self.ax.grid(True, alpha=0.3)
+        self.ax.set_title("Map (meters)", color=text_primary)
+        self.ax.grid(True, color=forest_border, alpha=0.25)
 
         # plot paths
         if self.paths['husky']:
@@ -527,7 +549,14 @@ class FirefightingGUI(Node):
             for i, (px, py) in enumerate(self.fire_positions):
                 self.ax.text(px + 0.4, py + 0.4, f"F{i+1}", color='red', weight='bold', fontsize=8)
 
-        self.ax.legend(loc='upper right')
+        legend = self.ax.legend(loc='upper right')
+        try:
+            legend.get_frame().set_facecolor(forest_panel)
+            legend.get_frame().set_edgecolor(forest_border)
+            for t in legend.get_texts():
+                t.set_color(text_primary)
+        except Exception:
+            pass
         self.canvas.draw_idle()
 
         # update status panel values

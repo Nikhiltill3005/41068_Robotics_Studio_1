@@ -78,13 +78,13 @@ class Ros2DualCameraGui(Node):
 
     # ---------------- UI -----------------
     def _build_layout(self) -> None:
-        # Colors to emulate index.html theme
-        BG = '#111827'            # gray-900
-        PANEL_BG = '#2d3748'      # smoke-gray
-        TEXT = '#e5e7eb'          # gray-200
-        DRONE = '#3b82f6'         # drone-blue
-        GROUND = '#10b981'        # ground-green
-        FIRE = '#ff4444'          # fire-red
+        # Forest green theme palette
+        BG = '#0b1f0b'            # deep forest background
+        PANEL_BG = '#123a12'      # panel background
+        TEXT = '#e6f4ea'          # light text
+        ACCENT = '#1a5d1a'        # primary accent
+        ACCENT_ACTIVE = '#134a13' # accent hover/active
+        FIRE = '#ff6b35'          # warm fire accent
 
         self.root.configure(bg=BG)
         style = ttk.Style()
@@ -96,8 +96,8 @@ class Ros2DualCameraGui(Node):
         style.configure('Panel.TFrame', background=PANEL_BG)
         style.configure('Dark.TLabel', background=BG, foreground=TEXT)
         style.configure('Panel.TLabel', background=PANEL_BG, foreground=TEXT)
-        style.configure('Accent.TButton', foreground=TEXT)
-        style.map('Accent.TButton', background=[('active', '#374151')])
+        style.configure('Accent.TButton', background=ACCENT, foreground=TEXT)
+        style.map('Accent.TButton', background=[('active', ACCENT_ACTIVE)])
 
         container = ttk.Frame(self.root, padding=12, style='Dark.TFrame')
         container.pack(fill=tk.BOTH, expand=True)
@@ -156,7 +156,7 @@ class Ros2DualCameraGui(Node):
         self.map_canvas = tk.Canvas(map_tab, bg='black', highlightthickness=0)
         self.map_canvas.grid(row=1, column=0, sticky='nsew', padx=10, pady=(0, 10))
         # Example frame border inside canvas region (visual placeholder)
-        self.map_canvas.create_rectangle(10, 10, 300, 200, outline=FIRE)
+        self.map_canvas.create_rectangle(10, 10, 300, 200, outline=ACCENT)
         self.map_canvas.create_text(20, 20, anchor='nw', fill='white',
                                     text='Add your 2D world rendering here...')
 
