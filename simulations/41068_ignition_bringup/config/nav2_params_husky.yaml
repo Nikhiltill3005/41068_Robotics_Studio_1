@@ -138,52 +138,52 @@ controller_server:
       plugin: "nav2_controller::SimpleGoalChecker"
       xy_goal_tolerance: 0.4
       yaw_goal_tolerance: 0.5
-    # DWB parameters - Optimized for dynamic obstacle avoidance
+    # DWB parameters - Optimized for tank steering and smooth navigation
     FollowPath:
       plugin: "dwb_core::DWBLocalPlanner"
       debug_trajectory_details: False
       min_vel_x: 0.0
       min_vel_y: 0.0
-      max_vel_x: 2.0
+      max_vel_x: 1.5
       max_vel_y: 0.0
-      max_vel_theta: 2.0
+      max_vel_theta: 1.0
       min_speed_xy: 0.0
-      max_speed_xy: 2.0
+      max_speed_xy: 1.5
       min_speed_theta: 0.0
-      # Responsive acceleration for dynamic obstacles
-      acc_lim_x: 2.5
+      # Smoother acceleration for tank steering
+      acc_lim_x: 1.5
       acc_lim_y: 0.0
-      acc_lim_theta: 3.2
-      decel_lim_x: -2.5
+      acc_lim_theta: 2.0
+      decel_lim_x: -1.5
       decel_lim_y: 0.0
-      decel_lim_theta: -3.2
-      # More trajectory samples for better obstacle avoidance
-      vx_samples: 10
+      decel_lim_theta: -2.0
+      # Optimized trajectory samples for tank steering
+      vx_samples: 15
       vy_samples: 1
-      vtheta_samples: 20
-      # Shorter simulation time for more reactive behavior
-      sim_time: 1.5
-      linear_granularity: 0.1
-      angular_granularity: 0.1
+      vtheta_samples: 15
+      # Longer simulation time for smoother paths
+      sim_time: 2.0
+      linear_granularity: 0.05
+      angular_granularity: 0.05
       transform_tolerance: 0.2
-      xy_goal_tolerance: 0.4
-      yaw_goal_tolerance: 0.5
-      trans_stopped_velocity: 0.25
+      xy_goal_tolerance: 0.3
+      yaw_goal_tolerance: 0.3
+      trans_stopped_velocity: 0.15
       short_circuit_trajectory_evaluation: True
       stateful: True
-      # Enhanced critics for dynamic obstacle avoidance
+      # Optimized critics for smooth tank steering
       critics: ["RotateToGoal", "Oscillation", "BaseObstacle", "GoalAlign", "PathAlign", "PathDist", "GoalDist"]
-      # Balanced obstacle avoidance - allows close approach to goals
+      # Balanced weights for smooth navigation
       BaseObstacle.scale: 0.02
-      PathAlign.scale: 24.0
-      PathAlign.forward_point_distance: 0.1
-      GoalAlign.scale: 32.0
-      GoalAlign.forward_point_distance: 0.1
-      PathDist.scale: 24.0
-      GoalDist.scale: 48.0
-      RotateToGoal.scale: 24.0
-      RotateToGoal.xy_goal_tolerance: 0.5
-      RotateToGoal.slowing_factor: 5.0
+      PathAlign.scale: 20.0
+      PathAlign.forward_point_distance: 0.2
+      GoalAlign.scale: 25.0
+      GoalAlign.forward_point_distance: 0.2
+      PathDist.scale: 20.0
+      GoalDist.scale: 30.0
+      RotateToGoal.scale: 20.0
+      RotateToGoal.xy_goal_tolerance: 0.3
+      RotateToGoal.slowing_factor: 3.0
       RotateToGoal.lookahead_time: -1.0
 
 local_costmap:
@@ -365,10 +365,10 @@ velocity_smoother:
     smoothing_frequency: 20.0
     scale_velocities: False
     feedback: "OPEN_LOOP"
-    max_velocity: [2.0, 0.0, 2.0]
-    min_velocity: [-2.0, 0.0, -2.0]
-    max_accel: [3.0, 0.0, 3.5]
-    max_decel: [-3.0, 0.0, -3.5]
+    max_velocity: [1.5, 0.0, 1.0]
+    min_velocity: [-1.5, 0.0, -1.0]
+    max_accel: [1.5, 0.0, 2.0]
+    max_decel: [-1.5, 0.0, -2.0]
     odom_topic: "/husky/odometry"
     odom_duration: 0.1
     deadband_velocity: [0.0, 0.0, 0.0]
