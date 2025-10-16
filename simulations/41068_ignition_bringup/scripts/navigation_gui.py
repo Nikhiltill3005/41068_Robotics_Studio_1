@@ -176,44 +176,56 @@ class NavigationGUI(Node):
         self.root = tk.Tk()
         self.root.title("Husky Navigation Control")
         self.root.geometry("800x600")
+        self.root.configure(bg="#1B4332")
+        
+        # Configure styles
+        style = ttk.Style()
+        style.theme_use("clam")
+        style.configure("Forest.TFrame", background="#2D5A3D")
+        style.configure("Forest.TLabel", background="#2D5A3D", foreground="#F8F9FA", font=("Segoe UI", 10))
+        style.configure("Forest.TLabelframe", background="#2D5A3D", foreground="#95D5B2")
+        style.configure("Forest.TLabelframe.Label", background="#2D5A3D", foreground="#95D5B2", font=("Segoe UI", 10, "bold"))
+        style.configure("Forest.TButton", background="#40916C", foreground="white", font=("Segoe UI", 9))
+        style.map("Forest.TButton", background=[("active", "#52B788")])
+        style.configure("Forest.TEntry", fieldbackground="#081C15", foreground="#F8F9FA", bordercolor="#40916C")
         
         # Create main frames
-        control_frame = ttk.Frame(self.root)
+        control_frame = ttk.Frame(self.root, style="Forest.TFrame")
         control_frame.pack(side=tk.LEFT, fill=tk.Y, padx=10, pady=10)
         
-        map_frame = ttk.Frame(self.root)
+        map_frame = ttk.Frame(self.root, style="Forest.TFrame")
         map_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=10, pady=10)
         
         # Control panel
-        ttk.Label(control_frame, text="Navigation Control", font=('Arial', 14, 'bold')).pack(pady=10)
+        ttk.Label(control_frame, text="Navigation Control", font=('Arial', 14, 'bold'), style="Forest.TLabel").pack(pady=10)
         
         # Robot status
-        status_frame = ttk.LabelFrame(control_frame, text="Robot Status")
+        status_frame = ttk.LabelFrame(control_frame, text="Robot Status", style="Forest.TLabelframe")
         status_frame.pack(fill=tk.X, pady=5)
         
-        self.robot_x_label = ttk.Label(status_frame, text="X: 0.00 m")
+        self.robot_x_label = ttk.Label(status_frame, text="X: 0.00 m", style="Forest.TLabel")
         self.robot_x_label.pack(anchor=tk.W)
         
-        self.robot_y_label = ttk.Label(status_frame, text="Y: 0.00 m")
+        self.robot_y_label = ttk.Label(status_frame, text="Y: 0.00 m", style="Forest.TLabel")
         self.robot_y_label.pack(anchor=tk.W)
         
-        self.robot_yaw_label = ttk.Label(status_frame, text="Yaw: 0.00 rad")
+        self.robot_yaw_label = ttk.Label(status_frame, text="Yaw: 0.00 rad", style="Forest.TLabel")
         self.robot_yaw_label.pack(anchor=tk.W)
         
         # Goal input
-        goal_frame = ttk.LabelFrame(control_frame, text="Set Navigation Goal")
+        goal_frame = ttk.LabelFrame(control_frame, text="Set Navigation Goal", style="Forest.TLabelframe")
         goal_frame.pack(fill=tk.X, pady=10)
         
-        ttk.Label(goal_frame, text="X coordinate (m):").pack(anchor=tk.W)
-        self.x_entry = ttk.Entry(goal_frame, width=15)
+        ttk.Label(goal_frame, text="X coordinate (m):", style="Forest.TLabel").pack(anchor=tk.W)
+        self.x_entry = ttk.Entry(goal_frame, width=15, style="Forest.TEntry")
         self.x_entry.pack(fill=tk.X, pady=2)
         
-        ttk.Label(goal_frame, text="Y coordinate (m):").pack(anchor=tk.W)
-        self.y_entry = ttk.Entry(goal_frame, width=15)
+        ttk.Label(goal_frame, text="Y coordinate (m):", style="Forest.TLabel").pack(anchor=tk.W)
+        self.y_entry = ttk.Entry(goal_frame, width=15, style="Forest.TEntry")
         self.y_entry.pack(fill=tk.X, pady=2)
         
-        ttk.Label(goal_frame, text="Yaw (rad, optional):").pack(anchor=tk.W)
-        self.yaw_entry = ttk.Entry(goal_frame, width=15)
+        ttk.Label(goal_frame, text="Yaw (rad, optional):", style="Forest.TLabel").pack(anchor=tk.W)
+        self.yaw_entry = ttk.Entry(goal_frame, width=15, style="Forest.TEntry")
         self.yaw_entry.pack(fill=tk.X, pady=2)
         self.yaw_entry.insert(0, "0.0")
         
@@ -221,27 +233,29 @@ class NavigationGUI(Node):
         button_frame = ttk.Frame(goal_frame)
         button_frame.pack(fill=tk.X, pady=10)
         
-        ttk.Button(button_frame, text="Send Goal", command=self.on_send_goal).pack(side=tk.LEFT, padx=2)
-        ttk.Button(button_frame, text="Cancel Goal", command=self.on_cancel_goal).pack(side=tk.LEFT, padx=2)
+        ttk.Button(button_frame, text="Send Goal", command=self.on_send_goal, style="Forest.TButton").pack(side=tk.LEFT, padx=2)
+        ttk.Button(button_frame, text="Cancel Goal", command=self.on_cancel_goal, style="Forest.TButton").pack(side=tk.LEFT, padx=2)
         
         # Quick goals
-        quick_frame = ttk.LabelFrame(control_frame, text="Quick Goals")
+        quick_frame = ttk.LabelFrame(control_frame, text="Quick Goals", style="Forest.TLabelframe")
         quick_frame.pack(fill=tk.X, pady=5)
         
-        ttk.Button(quick_frame, text="Origin (0,0)", command=lambda: self.set_quick_goal(0, 0)).pack(fill=tk.X, pady=1)
-        ttk.Button(quick_frame, text="Forward 5m", command=self.go_forward_5m).pack(fill=tk.X, pady=1)
-        ttk.Button(quick_frame, text="Backward 5m", command=self.go_backward_5m).pack(fill=tk.X, pady=1)
+        ttk.Button(quick_frame, text="Origin (0,0)", command=lambda: self.set_quick_goal(0, 0), style="Forest.TButton").pack(fill=tk.X, pady=1)
+        ttk.Button(quick_frame, text="Forward 5m", command=self.go_forward_5m, style="Forest.TButton").pack(fill=tk.X, pady=1)
+        ttk.Button(quick_frame, text="Backward 5m", command=self.go_backward_5m, style="Forest.TButton").pack(fill=tk.X, pady=1)
         
         # Map display
-        ttk.Label(map_frame, text="SLAM Map (Click to set goal)", font=('Arial', 12, 'bold')).pack()
+        ttk.Label(map_frame, text="SLAM Map (Click to set goal)", font=('Arial', 12, 'bold'), style="Forest.TLabel").pack()
         
         # Create matplotlib figure for map
-        self.fig = Figure(figsize=(6, 6), dpi=100)
+        self.fig = Figure(figsize=(6, 6), dpi=100, facecolor='#2D5A3D')
         self.ax = self.fig.add_subplot(111)
+        self.ax.set_facecolor('#1B4332')
         self.ax.set_aspect('equal')
-        self.ax.set_title('Robot Map')
-        self.ax.set_xlabel('X (m)')
-        self.ax.set_ylabel('Y (m)')
+        self.ax.set_title('Robot Map', color='#F8F9FA', fontweight='bold')
+        self.ax.set_xlabel('X (m)', color='#F8F9FA')
+        self.ax.set_ylabel('Y (m)', color='#F8F9FA')
+        self.ax.tick_params(colors='#95D5B2')
         
         self.canvas = FigureCanvasTkAgg(self.fig, map_frame)
         self.canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
@@ -252,13 +266,13 @@ class NavigationGUI(Node):
         # Initial map setup
         self.ax.set_xlim(-10, 10)
         self.ax.set_ylim(-10, 10)
-        self.ax.grid(True, alpha=0.3)
+        self.ax.grid(True, color='#40916C', alpha=0.5)
         
         # Robot marker
-        self.robot_marker = self.ax.plot(0, 0, 'ro', markersize=8, label='Robot')[0]
+        self.robot_marker = self.ax.plot(0, 0, 's', color='#28A745', markersize=10, markeredgecolor='#F8F9FA', markeredgewidth=2, label='Robot')[0]
         self.goal_marker = None
         
-        self.ax.legend()
+        self.ax.legend(facecolor='#2D5A3D', edgecolor='#40916C', labelcolor='#F8F9FA')
         self.canvas.draw()
         
         # Start GUI update timer
@@ -358,10 +372,11 @@ class NavigationGUI(Node):
                 self.ax.set_xlim(x_min - padding, x_max + padding)
                 self.ax.set_ylim(y_min - padding, y_max + padding)
                 
-                self.ax.set_title('SLAM Map')
-                self.ax.set_xlabel('X (m)')
-                self.ax.set_ylabel('Y (m)')
-                self.ax.grid(True, alpha=0.3)
+                self.ax.set_title('SLAM Map', color='#F8F9FA', fontweight='bold')
+                self.ax.set_xlabel('X (m)', color='#F8F9FA')
+                self.ax.set_ylabel('Y (m)', color='#F8F9FA')
+                self.ax.tick_params(colors='#95D5B2')
+                self.ax.grid(True, color='#40916C', alpha=0.5)
                 
                 # Ensure we have proper tick configuration to avoid IndexError
                 self.ax.xaxis.set_minor_locator(NullLocator())
@@ -387,7 +402,7 @@ class NavigationGUI(Node):
             arrow = patches.FancyArrowPatch(
                 (self.robot_x, self.robot_y),
                 (self.robot_x + dx, self.robot_y + dy),
-                arrowstyle='->', mutation_scale=20, color='red'
+                arrowstyle='->', mutation_scale=20, color='#28A745', linewidth=2
             )
             self.ax.add_patch(arrow)
         
@@ -396,7 +411,7 @@ class NavigationGUI(Node):
             if self.goal_marker:
                 self.goal_marker.remove()
             self.goal_marker = self.ax.plot(self.current_goal[0], self.current_goal[1], 
-                                          'g*', markersize=15, label='Goal')[0]
+                                          '*', color='#FFD60A', markersize=15, markeredgecolor='#FF6B35', markeredgewidth=2, label='Goal')[0]
         
         if hasattr(self, 'canvas'):
             try:

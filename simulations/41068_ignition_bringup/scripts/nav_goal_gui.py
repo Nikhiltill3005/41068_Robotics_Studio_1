@@ -54,36 +54,48 @@ class NavGoalGUI(Node):
         self.root.title("Husky Navigation Goal Controller")
         self.root.geometry("400x300")
         self.root.resizable(False, False)
+        self.root.configure(bg="#1B4332")
+        
+        # Configure styles
+        style = ttk.Style()
+        style.theme_use("clam")
+        style.configure("Forest.TFrame", background="#1B4332")
+        style.configure("Forest.TLabel", background="#1B4332", foreground="#F8F9FA", font=("Segoe UI", 10))
+        style.configure("Forest.TLabelframe", background="#2D5A3D", foreground="#95D5B2")
+        style.configure("Forest.TLabelframe.Label", background="#2D5A3D", foreground="#95D5B2", font=("Segoe UI", 10, "bold"))
+        style.configure("Forest.TButton", background="#40916C", foreground="white", font=("Segoe UI", 9))
+        style.map("Forest.TButton", background=[("active", "#52B788")])
+        style.configure("Forest.TEntry", fieldbackground="#081C15", foreground="#F8F9FA", bordercolor="#40916C")
         
         # Main frame
-        main_frame = ttk.Frame(self.root, padding="10")
+        main_frame = ttk.Frame(self.root, padding="10", style="Forest.TFrame")
         main_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
         
         # Title
         title_label = ttk.Label(main_frame, text="Husky Navigation Goals", 
-                               font=('Arial', 16, 'bold'))
+                               font=('Arial', 16, 'bold'), style="Forest.TLabel")
         title_label.grid(row=0, column=0, columnspan=2, pady=(0, 20))
         
         # X coordinate
-        ttk.Label(main_frame, text="X Coordinate:").grid(row=1, column=0, sticky=tk.W, pady=5)
+        ttk.Label(main_frame, text="X Coordinate:", style="Forest.TLabel").grid(row=1, column=0, sticky=tk.W, pady=5)
         self.x_var = tk.StringVar(value="0.0")
-        x_entry = ttk.Entry(main_frame, textvariable=self.x_var, width=15)
+        x_entry = ttk.Entry(main_frame, textvariable=self.x_var, width=15, style="Forest.TEntry")
         x_entry.grid(row=1, column=1, sticky=(tk.W, tk.E), pady=5, padx=(10, 0))
         
         # Y coordinate
-        ttk.Label(main_frame, text="Y Coordinate:").grid(row=2, column=0, sticky=tk.W, pady=5)
+        ttk.Label(main_frame, text="Y Coordinate:", style="Forest.TLabel").grid(row=2, column=0, sticky=tk.W, pady=5)
         self.y_var = tk.StringVar(value="0.0")
-        y_entry = ttk.Entry(main_frame, textvariable=self.y_var, width=15)
+        y_entry = ttk.Entry(main_frame, textvariable=self.y_var, width=15, style="Forest.TEntry")
         y_entry.grid(row=2, column=1, sticky=(tk.W, tk.E), pady=5, padx=(10, 0))
         
         # Orientation (yaw in degrees)
-        ttk.Label(main_frame, text="Orientation (degrees):").grid(row=3, column=0, sticky=tk.W, pady=5)
+        ttk.Label(main_frame, text="Orientation (degrees):", style="Forest.TLabel").grid(row=3, column=0, sticky=tk.W, pady=5)
         self.yaw_var = tk.StringVar(value="0.0")
-        yaw_entry = ttk.Entry(main_frame, textvariable=self.yaw_var, width=15)
+        yaw_entry = ttk.Entry(main_frame, textvariable=self.yaw_var, width=15, style="Forest.TEntry")
         yaw_entry.grid(row=3, column=1, sticky=(tk.W, tk.E), pady=5, padx=(10, 0))
         
         # Quick preset buttons
-        preset_frame = ttk.LabelFrame(main_frame, text="Quick Presets", padding="5")
+        preset_frame = ttk.LabelFrame(main_frame, text="Quick Presets", padding="5", style="Forest.TLabelframe")
         preset_frame.grid(row=4, column=0, columnspan=2, pady=20, sticky=(tk.W, tk.E))
         
         # Preset buttons
@@ -97,7 +109,7 @@ class NavGoalGUI(Node):
         
         for i, (name, x, y, yaw) in enumerate(presets):
             btn = ttk.Button(preset_frame, text=name, 
-                           command=lambda x=x, y=y, yaw=yaw: self.set_preset(x, y, yaw))
+                           command=lambda x=x, y=y, yaw=yaw: self.set_preset(x, y, yaw), style="Forest.TButton")
             btn.grid(row=i//3, column=i%3, padx=2, pady=2, sticky=(tk.W, tk.E))
         
         # Control buttons
@@ -107,18 +119,18 @@ class NavGoalGUI(Node):
         # Navigate button
         self.navigate_btn = ttk.Button(button_frame, text="Navigate to Goal", 
                                      command=self.send_navigation_goal, 
-                                     style='Accent.TButton')
+                                     style='Forest.TButton')
         self.navigate_btn.pack(side=tk.LEFT, padx=5)
         
         # Cancel button
         self.cancel_btn = ttk.Button(button_frame, text="Cancel Navigation", 
-                                   command=self.cancel_navigation)
+                                   command=self.cancel_navigation, style='Forest.TButton')
         self.cancel_btn.pack(side=tk.LEFT, padx=5)
         
         # Status label
         self.status_var = tk.StringVar(value="Ready")
         status_label = ttk.Label(main_frame, textvariable=self.status_var, 
-                                foreground="blue")
+                                foreground="#52B788", style="Forest.TLabel")
         status_label.grid(row=6, column=0, columnspan=2, pady=10)
         
         # Configure grid weights

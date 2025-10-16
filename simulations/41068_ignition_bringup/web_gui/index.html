@@ -10,12 +10,18 @@
       theme: {
         extend: {
           colors: {
-            'fire-red': '#ff4444',
-            'forest-green': '#1a5d1a',
-            'ember-orange': '#ff6b35',
-            'smoke-gray': '#2d3748',
-            'drone-blue': '#3b82f6',
-            'ground-green': '#10b981'
+            'fire-red': '#FF6B35',
+            'forest-green': '#1B4332',
+            'forest-medium': '#2D5A3D',
+            'forest-light': '#40916C',
+            'forest-accent': '#52B788',
+            'sage-green': '#95D5B2',
+            'ember-orange': '#FF6B35',
+            'alert-yellow': '#FFD60A',
+            'smoke-gray': '#2D5A3D',
+            'drone-blue': '#4A90E2',
+            'ground-green': '#28A745',
+            'dark-pine': '#081C15'
           }
         }
       }
@@ -31,14 +37,14 @@
       animation:gradient 3s ease infinite;
       padding:3px;border-radius:1rem;
     }
-    .gradient-border-drone{background:linear-gradient(45deg,#3b82f6,#1d4ed8,#3b82f6);}
-    .gradient-border-ground{background:linear-gradient(45deg,#10b981,#059669,#10b981);}
+    .gradient-border-drone{background:linear-gradient(45deg,#4A90E2,#2563EB,#4A90E2);}
+    .gradient-border-ground{background:linear-gradient(45deg,#28A745,#16A34A,#28A745);}
     @keyframes gradient{0%{background-position:0% 50%}50%{background-position:100% 50%}100%{background-position:0% 50%}}
-    .glass-effect{backdrop-filter:blur(10px);background:rgba(45,55,72,0.8);border:1px solid rgba(255,255,255,0.1);}
+    .glass-effect{backdrop-filter:blur(10px);background:rgba(27,67,50,0.9);border:1px solid rgba(149,213,178,0.2);}
     .camera-image{filter:contrast(1.1) brightness(1.05) saturate(1.1);}
   </style>
 </head>
-<body class="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black overflow-x-hidden">
+<body class="min-h-screen bg-gradient-to-br from-forest-green via-forest-medium to-dark-pine overflow-x-hidden">
 
   <!-- HEADER -->
   <header class="relative z-10 p-6">
@@ -51,11 +57,11 @@
           <h1 class="text-2xl font-bold bg-gradient-to-r from-fire-red to-ember-orange bg-clip-text text-transparent">
             Forest Fire Detection System
           </h1>
-          <p class="text-gray-400 text-sm">Multi-vehicle IR monitoring & alert system</p>
+          <p class="text-sage-green text-sm font-medium">Multi-vehicle IR monitoring & alert system</p>
         </div>
       </div>
-      <div class="hidden md:flex items-center space-x-2 text-green-400">
-        <div class="w-3 h-3 bg-green-400 rounded-full fire-pulse"></div>
+      <div class="hidden md:flex items-center space-x-2 text-sage-green">
+        <div class="w-3 h-3 bg-sage-green rounded-full fire-pulse"></div>
         <span class="text-sm font-medium">System Online</span>
       </div>
     </div>
@@ -77,7 +83,7 @@
             </h2>
             <!-- Dropdown for switching feeds -->
             <select id="droneFeedSelect" 
-                    class="bg-gray-800 text-white text-sm rounded-lg px-2 py-1 border border-gray-600"
+                    class="bg-dark-pine text-sage-green text-sm rounded-lg px-2 py-1 border border-forest-light"
                     onchange="switchDroneFeed()">
               <option value="ir">IR Camera</option>
               <option value="rgb">RGB Camera</option>
@@ -93,9 +99,9 @@
               </div>
             </div>
           </div>
-          <div class="mt-4 flex items-center justify-between text-sm text-gray-400">
-            <span id="droneFeedLabel">Currently: IR Camera</span>
-            <span id="droneConnectionStatus">Connecting...</span>
+          <div class="mt-4 flex items-center justify-between text-sm text-sage-green">
+            <span id="droneFeedLabel" class="font-medium">Currently: IR Camera</span>
+            <span id="droneConnectionStatus" class="font-medium">Connecting...</span>
           </div>
         </div>
 
@@ -106,7 +112,7 @@
               <span class="w-6 h-6 bg-ground-green rounded-full fire-pulse"></span>
               <span>🚗 Ground Vehicle IR Camera</span>
             </h2>
-            <button class="px-3 py-1 bg-ground-green/20 text-ground-green rounded-lg text-sm">🔴 LIVE</button>
+            <button class="px-3 py-1 bg-ground-green/20 text-ground-green rounded-lg text-sm font-medium">🔴 LIVE</button>
           </div>
           <div class="relative">
             <div class="gradient-border-ground">
@@ -117,7 +123,7 @@
               </div>
             </div>
           </div>
-          <div class="mt-4 text-sm text-gray-400">Resolution: 1920x1080 • FPS: 30</div>
+          <div class="mt-4 text-sm text-sage-green font-medium">Resolution: 1920x1080 • FPS: 30</div>
         </div>
 
       </div>

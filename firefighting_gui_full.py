@@ -230,38 +230,38 @@ class FirefightingGUI(Node):
     def setup_gui(self):
         self.root.title("Firefighting Robot Control Center")
         self.root.geometry("1600x1000")
-        self.root.configure(bg="#f2f4f8")
+        self.root.configure(bg="#1B4332")
 
         # ---------- Style ----------
         style = ttk.Style()
         style.theme_use("clam")
-        style.configure("TButton", font=("Segoe UI", 10), padding=6, background="#0078d7", foreground="white")
-        style.map("TButton", background=[("active", "#005a9e")])
-        style.configure("TLabel", background="#f2f4f8", foreground="#1e2a38", font=("Segoe UI", 10))
-        style.configure("TLabelframe", background="#ffffff", foreground="#1e2a38", padding=10)
-        style.configure("TLabelframe.Label", font=("Segoe UI", 11, "bold"))
-        style.configure("TCheckbutton", background="#ffffff", foreground="#1e2a38")
+        style.configure("TButton", font=("Segoe UI", 10), padding=6, background="#40916C", foreground="white")
+        style.map("TButton", background=[("active", "#52B788")])
+        style.configure("TLabel", background="#1B4332", foreground="#F8F9FA", font=("Segoe UI", 10))
+        style.configure("TLabelframe", background="#2D5A3D", foreground="#F8F9FA", padding=10)
+        style.configure("TLabelframe.Label", font=("Segoe UI", 11, "bold"), foreground="#95D5B2")
+        style.configure("TCheckbutton", background="#2D5A3D", foreground="#F8F9FA")
 
         # ---------- Top Bar ----------
         topbar = ttk.Frame(self.root, padding=6)
         topbar.pack(fill=tk.X, pady=4)
 
         self.mode_btn = tk.Button(
-            topbar, text="Switch to MANUAL", bg="#0078d7", fg="white",
+            topbar, text="Switch to MANUAL", bg="#40916C", fg="white",
             font=("Segoe UI", 10, "bold"), relief="flat", padx=8, pady=4,
-            command=self.toggle_mode
+            command=self.toggle_mode, activebackground="#52B788"
         )
         self.mode_btn.pack(side=tk.LEFT, padx=4)
 
         stop_btn = tk.Button(
-            topbar, text="EMERGENCY STOP", bg="#e81123", fg="white",
+            topbar, text="EMERGENCY STOP", bg="#FF6B35", fg="white",
             font=("Segoe UI", 10, "bold"), relief="flat", padx=8, pady=4,
-            command=self.emergency_stop
+            command=self.emergency_stop, activebackground="#FF8C42"
         )
         stop_btn.pack(side=tk.LEFT, padx=4)
 
         self.teleop_label = tk.Label(topbar, text=f"Control: {self.active_robot.upper()}",
-                                    bg="#f2f4f8", fg="#1e2a38", font=("Segoe UI", 10))
+                                    bg="#1B4332", fg="#95D5B2", font=("Segoe UI", 10, "bold"))
         self.teleop_label.pack(side=tk.LEFT, padx=10)
 
         ttk.Button(topbar, text="Return Home", command=lambda: self.log("Return Home triggered")).pack(side=tk.LEFT, padx=4)
@@ -285,10 +285,10 @@ class FirefightingGUI(Node):
         self.cam_labels = {}
         cams = ["drone_rgb", "drone_ir", "husky_rgb"]
         for idx, key in enumerate(cams):
-            lbl_frame = tk.Frame(cam_frame, width=320, height=240, bg="#e6e9ef", highlightbackground="#cccccc", highlightthickness=1)
+            lbl_frame = tk.Frame(cam_frame, width=320, height=240, bg="#081C15", highlightbackground="#40916C", highlightthickness=2)
             lbl_frame.grid(row=idx // 2, column=idx % 2, padx=6, pady=6)
             lbl_frame.grid_propagate(False)
-            lbl = tk.Label(lbl_frame, text=f"Waiting for {key}", bg="#e6e9ef", fg="#444", anchor="center")
+            lbl = tk.Label(lbl_frame, text=f"Waiting for {key}", bg="#081C15", fg="#95D5B2", anchor="center", font=("Segoe UI", 10))
             lbl.pack(fill=tk.BOTH, expand=True)
             self.cam_labels[key] = lbl
 
@@ -305,15 +305,15 @@ class FirefightingGUI(Node):
         map_frame = ttk.LabelFrame(middle, text="2D Map", padding=8)
         map_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
         self.fig, self.ax = plt.subplots(figsize=(7, 7))
-        self.fig.patch.set_facecolor("#ffffff")
-        self.ax.set_facecolor("#ffffff")
-        self.ax.grid(True, color="#cccccc", alpha=0.5)
+        self.fig.patch.set_facecolor("#2D5A3D")
+        self.ax.set_facecolor("#1B4332")
+        self.ax.grid(True, color="#40916C", alpha=0.7)
         self.ax.set_xlim(-self.world_size/2, self.world_size/2)
         self.ax.set_ylim(-self.world_size/2, self.world_size/2)
-        self.ax.set_title("Map (meters)", color="#1e2a38", fontsize=11)
-        self.husky_marker, = self.ax.plot([], [], "bs", markersize=10, label="Husky Path")
-        self.drone_marker, = self.ax.plot([], [], "g^", markersize=10, label="Drone Path")
-        self.fire_scatter = self.ax.scatter([], [], c="r", s=80, label="Fire")
+        self.ax.set_title("Map (meters)", color="#F8F9FA", fontsize=11, fontweight="bold")
+        self.husky_marker, = self.ax.plot([], [], "s", color="#28A745", markersize=10, label="Husky Path")
+        self.drone_marker, = self.ax.plot([], [], "^", color="#4A90E2", markersize=10, label="Drone Path")
+        self.fire_scatter = self.ax.scatter([], [], c="#FF6B35", s=80, label="Fire")
         self.ax.legend(loc="upper right")
         self.canvas = FigureCanvasTkAgg(self.fig, master=map_frame)
         self.canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
@@ -350,7 +350,7 @@ class FirefightingGUI(Node):
         # Mission log
         log_frame = ttk.LabelFrame(bottom, text="Mission Log", padding=6)
         log_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
-        self.log_box = scrolledtext.ScrolledText(log_frame, height=10, bg="#f7f9fb", fg="#1e2a38", font=("Consolas", 9))
+        self.log_box = scrolledtext.ScrolledText(log_frame, height=10, bg="#081C15", fg="#95D5B2", font=("Consolas", 9), insertbackground="#95D5B2")
         self.log_box.pack(fill=tk.BOTH, expand=True)
         self.log_box.config(state="disabled")
 
@@ -468,7 +468,7 @@ class FirefightingGUI(Node):
         for key, lbl in self.cam_labels.items():
             if not self.camera_enabled.get(key, True):
                 # show placeholder
-                lbl.configure(text=f"{key} (disabled)", image='', bg='gray20')
+                lbl.configure(text=f"{key} (disabled)", image='', bg='#081C15', fg='#6C757D')
                 continue
             try:
                 frame = self.camera_queues[key].get_nowait()
@@ -499,35 +499,35 @@ class FirefightingGUI(Node):
         self.ax.clear()
         self.ax.set_xlim(-self.world_size/2, self.world_size/2)
         self.ax.set_ylim(-self.world_size/2, self.world_size/2)
-        self.ax.set_title("Map (meters)")
-        self.ax.grid(True, alpha=0.3)
+        self.ax.set_title("Map (meters)", color="#F8F9FA", fontweight="bold")
+        self.ax.grid(True, color="#40916C", alpha=0.5)
 
         # plot paths
         if self.paths['husky']:
             xs, ys = zip(*self.paths['husky'])
-            self.ax.plot(xs, ys, '-', color='blue', linewidth=1, alpha=0.7, label='Husky Path')
+            self.ax.plot(xs, ys, '-', color='#28A745', linewidth=2, alpha=0.8, label='Husky Path')
         if self.paths['drone']:
             xs, ys = zip(*self.paths['drone'])
-            self.ax.plot(xs, ys, '-', color='green', linewidth=1, alpha=0.7, label='Drone Path')
+            self.ax.plot(xs, ys, '-', color='#4A90E2', linewidth=2, alpha=0.8, label='Drone Path')
 
         # plot robots
         if self.positions['husky']:
             x, y = self.positions['husky']
-            self.ax.plot(x, y, 'bs', markersize=10)
-            self.ax.text(x, y - 0.7, f"H({x:.1f},{y:.1f})", fontsize=8, ha='center')
+            self.ax.plot(x, y, 's', color='#28A745', markersize=12, markeredgecolor='#F8F9FA', markeredgewidth=2)
+            self.ax.text(x, y - 0.7, f"H({x:.1f},{y:.1f})", fontsize=8, ha='center', color='#F8F9FA', fontweight='bold')
         if self.positions['drone']:
             x, y = self.positions['drone']
-            self.ax.plot(x, y, 'g^', markersize=10)
-            self.ax.text(x, y + 0.7, f"D({x:.1f},{y:.1f})", fontsize=8, ha='center')
+            self.ax.plot(x, y, '^', color='#4A90E2', markersize=12, markeredgecolor='#F8F9FA', markeredgewidth=2)
+            self.ax.text(x, y + 0.7, f"D({x:.1f},{y:.1f})", fontsize=8, ha='center', color='#F8F9FA', fontweight='bold')
 
         # fires
         if self.fire_positions:
             fx, fy = zip(*self.fire_positions)
-            self.ax.scatter(fx, fy, c='r', s=80)
+            self.ax.scatter(fx, fy, c='#FF6B35', s=100, edgecolors='#FFD60A', linewidth=2)
             for i, (px, py) in enumerate(self.fire_positions):
-                self.ax.text(px + 0.4, py + 0.4, f"F{i+1}", color='red', weight='bold', fontsize=8)
+                self.ax.text(px + 0.4, py + 0.4, f"F{i+1}", color='#FF6B35', weight='bold', fontsize=9)
 
-        self.ax.legend(loc='upper right')
+        self.ax.legend(loc='upper right', facecolor='#2D5A3D', edgecolor='#40916C', labelcolor='#F8F9FA')
         self.canvas.draw_idle()
 
         # update status panel values
