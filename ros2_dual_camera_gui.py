@@ -78,13 +78,13 @@ class Ros2DualCameraGui(Node):
 
     # ---------------- UI -----------------
     def _build_layout(self) -> None:
-        # Colors to emulate index.html theme
-        BG = '#111827'            # gray-900
-        PANEL_BG = '#2d3748'      # smoke-gray
-        TEXT = '#e5e7eb'          # gray-200
-        DRONE = '#3b82f6'         # drone-blue
-        GROUND = '#10b981'        # ground-green
-        FIRE = '#ff4444'          # fire-red
+        # Forest Green Theme Colors
+        BG = '#1a2912'            # dark forest green background
+        PANEL_BG = '#243318'      # forest green panel
+        TEXT = '#e8f5e9'          # light green-white text
+        DRONE = '#66bb6a'         # nature green for drone
+        GROUND = '#4e8328'        # forest green for ground
+        FIRE = '#ff5722'          # fire orange-red
 
         self.root.configure(bg=BG)
         style = ttk.Style()
@@ -96,15 +96,15 @@ class Ros2DualCameraGui(Node):
         style.configure('Panel.TFrame', background=PANEL_BG)
         style.configure('Dark.TLabel', background=BG, foreground=TEXT)
         style.configure('Panel.TLabel', background=PANEL_BG, foreground=TEXT)
-        style.configure('Accent.TButton', foreground=TEXT)
-        style.map('Accent.TButton', background=[('active', '#374151')])
+        style.configure('Accent.TButton', background='#4e8328', foreground=TEXT)
+        style.map('Accent.TButton', background=[('active', '#6b9e3e')])
 
         container = ttk.Frame(self.root, padding=12, style='Dark.TFrame')
         container.pack(fill=tk.BOTH, expand=True)
 
         # Title
         title = ttk.Label(container, text='Forest Fire Detection System', style='Dark.TLabel',
-                          font=('Segoe UI', 18, 'bold'))
+                          font=('Segoe UI', 18, 'bold'), foreground='#a5d6a7')
         title.pack(anchor=tk.W, pady=(0, 12))
 
         # Notebook with two tabs: Cameras (stacked vertically) and Map (empty placeholder)
@@ -132,7 +132,7 @@ class Ros2DualCameraGui(Node):
                    command=self.toggle_drone_topic).pack(side=tk.RIGHT)
         self.drone_topic_label = ttk.Label(header, text='IR', width=6, anchor='center', style='Panel.TLabel')
         self.drone_topic_label.pack(side=tk.RIGHT, padx=(0, 8))
-        self.drone_label = tk.Label(drone_panel, bg='black', fg='white',
+        self.drone_label = tk.Label(drone_panel, bg='#1a2912', fg='#a5d6a7',
                                     text='Waiting for drone frames...')
         self.drone_label.pack(fill=tk.BOTH, expand=True, pady=(8, 0))
 
@@ -141,7 +141,7 @@ class Ros2DualCameraGui(Node):
         ground_panel.grid(row=1, column=0, sticky='nsew', pady=(8, 0))
         ttk.Label(ground_panel, text='🚗 Ground Vehicle Camera', style='Panel.TLabel',
                   font=('Segoe UI', 12, 'bold')).pack(anchor=tk.W)
-        self.ground_label = tk.Label(ground_panel, bg='black', fg='white',
+        self.ground_label = tk.Label(ground_panel, bg='#1a2912', fg='#a5d6a7',
                                      text='Waiting for ground frames...')
         self.ground_label.pack(fill=tk.BOTH, expand=True, pady=(8, 0))
 
@@ -153,12 +153,12 @@ class Ros2DualCameraGui(Node):
         ttk.Label(map_header, text='🗺️ Fire Map (2D) - Placeholder', style='Panel.TLabel',
                   font=('Segoe UI', 12, 'bold')).pack(anchor=tk.W)
         # Empty canvas you can draw onto later
-        self.map_canvas = tk.Canvas(map_tab, bg='black', highlightthickness=0)
+        self.map_canvas = tk.Canvas(map_tab, bg='#1a2912', highlightthickness=0)
         self.map_canvas.grid(row=1, column=0, sticky='nsew', padx=10, pady=(0, 10))
         # Example frame border inside canvas region (visual placeholder)
-        self.map_canvas.create_rectangle(10, 10, 300, 200, outline=FIRE)
-        self.map_canvas.create_text(20, 20, anchor='nw', fill='white',
-                                    text='Add your 2D world rendering here...')
+        self.map_canvas.create_rectangle(10, 10, 300, 200, outline=FIRE, width=2)
+        self.map_canvas.create_text(20, 20, anchor='nw', fill='#a5d6a7',
+                                    text='Add your 2D world rendering here...', font=('Segoe UI', 10))
 
     # ------------- ROS callbacks ---------
     def _on_drone_image(self, msg: ROSImage) -> None:

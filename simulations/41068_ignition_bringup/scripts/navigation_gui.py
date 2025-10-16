@@ -176,6 +176,18 @@ class NavigationGUI(Node):
         self.root = tk.Tk()
         self.root.title("Husky Navigation Control")
         self.root.geometry("800x600")
+        self.root.configure(bg="#1a2912")
+        
+        # Forest Green Theme Style
+        style = ttk.Style()
+        style.theme_use("clam")
+        style.configure("TFrame", background="#1a2912")
+        style.configure("TLabel", background="#1a2912", foreground="#e8f5e9", font=("Arial", 10))
+        style.configure("TLabelframe", background="#243318", foreground="#a5d6a7", borderwidth=2, relief="solid")
+        style.configure("TLabelframe.Label", foreground="#a5d6a7", font=("Arial", 10, "bold"))
+        style.configure("TButton", background="#4e8328", foreground="#e8f5e9", padding=5)
+        style.map("TButton", background=[("active", "#6b9e3e")])
+        style.configure("TEntry", fieldbackground="#243318", foreground="#e8f5e9", insertcolor="#a5d6a7")
         
         # Create main frames
         control_frame = ttk.Frame(self.root)
@@ -185,7 +197,7 @@ class NavigationGUI(Node):
         map_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=10, pady=10)
         
         # Control panel
-        ttk.Label(control_frame, text="Navigation Control", font=('Arial', 14, 'bold')).pack(pady=10)
+        ttk.Label(control_frame, text="Navigation Control", font=('Arial', 14, 'bold'), foreground="#a5d6a7").pack(pady=10)
         
         # Robot status
         status_frame = ttk.LabelFrame(control_frame, text="Robot Status")
@@ -233,15 +245,20 @@ class NavigationGUI(Node):
         ttk.Button(quick_frame, text="Backward 5m", command=self.go_backward_5m).pack(fill=tk.X, pady=1)
         
         # Map display
-        ttk.Label(map_frame, text="SLAM Map (Click to set goal)", font=('Arial', 12, 'bold')).pack()
+        ttk.Label(map_frame, text="SLAM Map (Click to set goal)", font=('Arial', 12, 'bold'), foreground="#a5d6a7").pack()
         
-        # Create matplotlib figure for map
+        # Create matplotlib figure for map with forest green theme
         self.fig = Figure(figsize=(6, 6), dpi=100)
+        self.fig.patch.set_facecolor('#1a2912')
         self.ax = self.fig.add_subplot(111)
+        self.ax.set_facecolor('#243318')
         self.ax.set_aspect('equal')
-        self.ax.set_title('Robot Map')
-        self.ax.set_xlabel('X (m)')
-        self.ax.set_ylabel('Y (m)')
+        self.ax.set_title('Robot Map', color='#a5d6a7', fontweight='bold')
+        self.ax.set_xlabel('X (m)', color='#a5d6a7')
+        self.ax.set_ylabel('Y (m)', color='#a5d6a7')
+        self.ax.tick_params(colors='#a5d6a7')
+        for spine in self.ax.spines.values():
+            spine.set_edgecolor('#4e8328')
         
         self.canvas = FigureCanvasTkAgg(self.fig, map_frame)
         self.canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
@@ -252,13 +269,14 @@ class NavigationGUI(Node):
         # Initial map setup
         self.ax.set_xlim(-10, 10)
         self.ax.set_ylim(-10, 10)
-        self.ax.grid(True, alpha=0.3)
+        self.ax.grid(True, color='#4e8328', alpha=0.3)
         
-        # Robot marker
-        self.robot_marker = self.ax.plot(0, 0, 'ro', markersize=8, label='Robot')[0]
+        # Robot marker with forest green theme
+        self.robot_marker = self.ax.plot(0, 0, 's', markersize=10, color='#42a5f5', 
+                                        markeredgecolor='#1976d2', markeredgewidth=2, label='Robot')[0]
         self.goal_marker = None
         
-        self.ax.legend()
+        self.ax.legend(facecolor='#243318', edgecolor='#4e8328', labelcolor='#e8f5e9')
         self.canvas.draw()
         
         # Start GUI update timer
@@ -336,12 +354,12 @@ class NavigationGUI(Node):
                 # Clear previous map
                 self.ax.clear()
                 
-                # Display occupancy grid
+                # Display occupancy grid with forest green theme
                 # Convert occupancy grid to image (0=free, 100=occupied, -1=unknown)
                 map_img = np.zeros_like(self.map_data, dtype=np.uint8)
-                map_img[self.map_data == -1] = 128  # Unknown = gray
-                map_img[self.map_data == 0] = 255   # Free = white
-                map_img[self.map_data > 50] = 0     # Occupied = black
+                map_img[self.map_data == -1] = 50   # Unknown = dark gray-green
+                map_img[self.map_data == 0] = 180   # Free = light
+                map_img[self.map_data > 50] = 10    # Occupied = very dark
                 
                 # Calculate map bounds in world coordinates
                 x_min = self.map_origin_x
@@ -349,19 +367,22 @@ class NavigationGUI(Node):
                 y_min = self.map_origin_y
                 y_max = self.map_origin_y + self.map_height * self.map_resolution
                 
-                # Display map
+                # Display map with green colormap
                 self.ax.imshow(map_img, extent=[x_min, x_max, y_min, y_max], 
-                              origin='lower', cmap='gray', alpha=0.8)
+                              origin='lower', cmap='Greens', alpha=0.7)
                 
                 # Update plot limits with some padding
                 padding = max(1.0, (x_max - x_min) * 0.1)  # 10% padding or 1m minimum
                 self.ax.set_xlim(x_min - padding, x_max + padding)
                 self.ax.set_ylim(y_min - padding, y_max + padding)
                 
-                self.ax.set_title('SLAM Map')
-                self.ax.set_xlabel('X (m)')
-                self.ax.set_ylabel('Y (m)')
-                self.ax.grid(True, alpha=0.3)
+                self.ax.set_title('SLAM Map', color='#a5d6a7', fontweight='bold')
+                self.ax.set_xlabel('X (m)', color='#a5d6a7')
+                self.ax.set_ylabel('Y (m)', color='#a5d6a7')
+                self.ax.tick_params(colors='#a5d6a7')
+                self.ax.grid(True, color='#4e8328', alpha=0.3)
+                for spine in self.ax.spines.values():
+                    spine.set_edgecolor('#4e8328')
                 
                 # Ensure we have proper tick configuration to avoid IndexError
                 self.ax.xaxis.set_minor_locator(NullLocator())
@@ -387,7 +408,7 @@ class NavigationGUI(Node):
             arrow = patches.FancyArrowPatch(
                 (self.robot_x, self.robot_y),
                 (self.robot_x + dx, self.robot_y + dy),
-                arrowstyle='->', mutation_scale=20, color='red'
+                arrowstyle='->', mutation_scale=20, color='#42a5f5', linewidth=2
             )
             self.ax.add_patch(arrow)
         
@@ -396,7 +417,8 @@ class NavigationGUI(Node):
             if self.goal_marker:
                 self.goal_marker.remove()
             self.goal_marker = self.ax.plot(self.current_goal[0], self.current_goal[1], 
-                                          'g*', markersize=15, label='Goal')[0]
+                                          '*', markersize=18, color='#66bb6a', 
+                                          markeredgecolor='#2e7d32', markeredgewidth=2, label='Goal')[0]
         
         if hasattr(self, 'canvas'):
             try:

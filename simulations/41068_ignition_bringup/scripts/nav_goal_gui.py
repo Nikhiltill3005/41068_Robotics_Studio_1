@@ -54,6 +54,19 @@ class NavGoalGUI(Node):
         self.root.title("Husky Navigation Goal Controller")
         self.root.geometry("400x300")
         self.root.resizable(False, False)
+        self.root.configure(bg="#1a2912")
+        
+        # Forest Green Theme Style
+        style = ttk.Style()
+        style.theme_use("clam")
+        style.configure("TFrame", background="#1a2912")
+        style.configure("TLabel", background="#1a2912", foreground="#e8f5e9", font=("Arial", 10))
+        style.configure("TLabelframe", background="#243318", foreground="#a5d6a7")
+        style.configure("TLabelframe.Label", foreground="#a5d6a7", font=("Arial", 10, "bold"))
+        style.configure("TButton", background="#4e8328", foreground="#e8f5e9", padding=5)
+        style.map("TButton", background=[("active", "#6b9e3e")])
+        style.configure("TEntry", fieldbackground="#243318", foreground="#e8f5e9", insertcolor="#a5d6a7")
+        style.configure("Accent.TButton", background="#4e8328", foreground="#e8f5e9", font=("Arial", 10, "bold"))
         
         # Main frame
         main_frame = ttk.Frame(self.root, padding="10")
@@ -61,7 +74,7 @@ class NavGoalGUI(Node):
         
         # Title
         title_label = ttk.Label(main_frame, text="Husky Navigation Goals", 
-                               font=('Arial', 16, 'bold'))
+                               font=('Arial', 16, 'bold'), foreground="#a5d6a7")
         title_label.grid(row=0, column=0, columnspan=2, pady=(0, 20))
         
         # X coordinate
@@ -118,7 +131,7 @@ class NavGoalGUI(Node):
         # Status label
         self.status_var = tk.StringVar(value="Ready")
         status_label = ttk.Label(main_frame, textvariable=self.status_var, 
-                                foreground="blue")
+                                foreground="#66bb6a", font=("Arial", 10, "bold"))
         status_label.grid(row=6, column=0, columnspan=2, pady=10)
         
         # Configure grid weights
