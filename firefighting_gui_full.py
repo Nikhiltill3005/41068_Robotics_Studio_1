@@ -53,7 +53,6 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
 
 class FirefightingGUI(Node):
-    #def __init__(self, root: tk.Tk):
     def __init__(self, root):
         super().__init__('firefighting_gui_full')
         self.root = root # Save reference to Tkinter root window
@@ -71,9 +70,10 @@ class FirefightingGUI(Node):
         self.declare_parameter('drone_batt_topic', '/drone/battery')
         self.declare_parameter('world_size', 50.0)
         self.declare_parameter('rviz_path_topic', '/visualization/path')
-        
         self.declare_parameter('husky_cmdvel_topic', '/husky/cmd_vel')
         self.declare_parameter('drone_cmdvel_topic', '/drone/cmd_vel')
+        # new parameter for terrain image path (relative to running directory)
+        self.declare_parameter('terrain_image', 'bushland_terrain.png')
 
         # Get parameter values
         self.topics = {
@@ -91,6 +91,7 @@ class FirefightingGUI(Node):
             'drone_cmdvel': self.get_parameter('drone_cmdvel_topic').get_parameter_value().string_value,
         }
         self.world_size = self.get_parameter('world_size').get_parameter_value().double_value
+        self.terrain_image_path = self.get_parameter('terrain_image').get_parameter_value().string_value
 
         # ---------- Application state ----------
         self.bridge = CvBridge()
@@ -110,7 +111,11 @@ class FirefightingGUI(Node):
         # Control mode publisher
         self.control_pub = self.create_publisher(String, self.topics['control_mode'], 10)
         self.current_mode = "autonomous"
+
+        # Path publisher for RViz (optional)
+        self.publish_rviz_path = False
         self.path_pub = self.create_publisher(Path, '/visualization/path', 10)
+        #self.path_pub = self.create_publisher(Path, self.topics['rviz_path'], 10)
 
         # ---------------- TELEOP ADDITION START ----------------
         # Publishers for manual teleoperation
@@ -138,10 +143,6 @@ class FirefightingGUI(Node):
 
         self.get_logger().info('Firefighting GUI initialised.')
         # ---------------- TELEOP ADDITION END ----------------
-
-        # Path publisher for RViz (optional)
-        self.publish_rviz_path = False
-        self.path_pub = self.create_publisher(Path, self.topics['rviz_path'], 10)
 
         # ---------- ROS2 subscriptions ----------
         # Camera image subscriptions
@@ -308,15 +309,32 @@ class FirefightingGUI(Node):
         self.fig.patch.set_facecolor("#ffffff")
         self.ax.set_facecolor("#ffffff")
         self.ax.grid(True, color="#cccccc", alpha=0.5)
+        
+        # Set aces to world size
         self.ax.set_xlim(-self.world_size/2, self.world_size/2)
         self.ax.set_ylim(-self.world_size/2, self.world_size/2)
+        self.ax.set_aspect('equal', 'box')
         self.ax.set_title("Map (meters)", color="#1e2a38", fontsize=11)
+        
+        # Prepare pplot object (will re-use in gui_map_loop)
         self.husky_marker, = self.ax.plot([], [], "bs", markersize=10, label="Husky Path")
         self.drone_marker, = self.ax.plot([], [], "g^", markersize=10, label="Drone Path")
         self.fire_scatter = self.ax.scatter([], [], c="r", s=80, label="Fire")
         self.ax.legend(loc="upper right")
         self.canvas = FigureCanvasTkAgg(self.fig, master=map_frame)
         self.canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
+
+        # Try to load terrain image (if available) and convert to numpy array
+        self.terrain_img = None
+        if self.terrain_image_path:
+            try:
+                p = os.path.expanduser(self.terrain_image_path)
+                img = Image.open(p).convert('RGBA')
+                self.terrain_img = np.asarray(img)
+                self.get_logger().info(f"Loaded terrain image: {p} (shape={self.terrain_img.shape})")
+            except Exception as e:
+                self.get_logger().warn(f"Failed to load terrain image '{self.terrain_image_path}': {e}")
+                self.terrain_img = None
 
         # ---------- Bottom: Status + Log ----------
         bottom = ttk.Frame(self.root)
@@ -502,6 +520,13 @@ class FirefightingGUI(Node):
         self.ax.set_title("Map (meters)")
         self.ax.grid(True, alpha=0.3)
 
+        # show terrain beneath all map elements if available
+        if self.terrain_img is not None:
+            # extent maps the image to world coordinates: left, right, bottom, top
+            extent = (-self.world_size/2, self.world_size/2, -self.world_size/2, self.world_size/2)
+            # display image with origin='lower' so that the array's (0,0) maps to the bottom-left
+            self.ax.imshow(self.terrain_img, extent=extent, origin='lower', zorder=0, interpolation='bilinear')
+
         # plot paths
         if self.paths['husky']:
             xs, ys = zip(*self.paths['husky'])
@@ -532,8 +557,20 @@ class FirefightingGUI(Node):
 
         # update status panel values
         self.fire_count_var.set(f"Fires: {len(self.fire_positions)}")
-        self.husky_batt_var.set(f"H: {self.batteries['husky'] if self.batteries['husky'] is not None else 'N/A'}")
-        self.drone_batt_var.set(f"D: {self.batteries['drone'] if self.batteries['drone'] is not None else 'N/A'}")
+        # update progressbars safely
+        if self.batteries['husky'] is not None:
+            try:
+                self.husky_batt_pb['value'] = max(0, min(100, float(self.batteries['husky'])))
+            except Exception:
+                pass
+        if self.batteries['drone'] is not None:
+            try:
+                self.drone_batt_pb['value'] = max(0, min(100, float(self.batteries['drone'])))
+            except Exception:
+                pass
+        #self.husky_batt_var.set(f"H: {self.batteries['husky'] if self.batteries['husky'] is not None else 'N/A'}")
+        #self.drone_batt_var.set(f"D: {self.batteries['drone'] if self.batteries['drone'] is not None else 'N/A'}")
+        
         self.husky_obs_var.set(f"H obstacle: {self.obstacles['husky']}")
         self.drone_obs_var.set(f"D obstacle: {self.obstacles['drone']}")
         # sensor health
