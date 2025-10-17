@@ -14,6 +14,7 @@ Features:
 - Live 4-camera display (drone/husky RGB + IR) with enable/disable toggles
 - 2D map with robot positions, fire positions, path visualization
   - also publishes nav_msgs/Path for RViz when enabled
+  - bushland terrain is overlayed onto 2D map
 - Battery indicators for both robots (subscribes to std_msgs/Float32 topics)
 - Fire count & nearest-fire distance metrics
 - Save snapshot (map + currently visible camera frames) to disk
