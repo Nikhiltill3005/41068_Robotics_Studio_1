@@ -136,95 +136,101 @@ controller_server:
     general_goal_checker:
       stateful: True
       plugin: "nav2_controller::SimpleGoalChecker"
-      xy_goal_tolerance: 0.4
-      yaw_goal_tolerance: 0.5
+      xy_goal_tolerance: 2.5
+      yaw_goal_tolerance: 1.5
     # DWB parameters - Optimized for tank steering and smooth navigation
     FollowPath:
       plugin: "dwb_core::DWBLocalPlanner"
       debug_trajectory_details: False
-      min_vel_x: 0.0
+      min_vel_x: -0.1
       min_vel_y: 0.0
-      max_vel_x: 1.5
+      max_vel_x: 1.2
       max_vel_y: 0.0
-      max_vel_theta: 1.0
+      max_vel_theta: 4.0
       min_speed_xy: 0.0
-      max_speed_xy: 1.5
+      max_speed_xy: 1.2
       min_speed_theta: 0.0
-      # Smoother acceleration for tank steering
-      acc_lim_x: 1.5
+      # Aggressive acceleration for tank steering
+      acc_lim_x: 2.0
       acc_lim_y: 0.0
-      acc_lim_theta: 2.0
-      decel_lim_x: -1.5
+      acc_lim_theta: 6.0
+      decel_lim_x: -2.0
       decel_lim_y: 0.0
-      decel_lim_theta: -2.0
-      # Optimized trajectory samples for tank steering
-      vx_samples: 15
+      decel_lim_theta: -6.0
+      # Optimized trajectory samples for aggressive tank steering with in-place turning
+      vx_samples: 20
       vy_samples: 1
-      vtheta_samples: 15
+      vtheta_samples: 50
       # Longer simulation time for smoother paths
       sim_time: 2.0
-      linear_granularity: 0.05
-      angular_granularity: 0.05
+      linear_granularity: 0.02
+      angular_granularity: 0.025
       transform_tolerance: 0.2
-      xy_goal_tolerance: 0.3
-      yaw_goal_tolerance: 0.3
-      trans_stopped_velocity: 0.15
+      xy_goal_tolerance: 0.5
+      yaw_goal_tolerance: 0.2
+      trans_stopped_velocity: 0.05
       short_circuit_trajectory_evaluation: True
       stateful: True
-      # Optimized critics for smooth tank steering
+      # Optimized critics for smooth tank steering with forward preference
       critics: ["RotateToGoal", "Oscillation", "BaseObstacle", "GoalAlign", "PathAlign", "PathDist", "GoalDist"]
-      # Balanced weights for smooth navigation
-      BaseObstacle.scale: 0.02
-      PathAlign.scale: 20.0
-      PathAlign.forward_point_distance: 0.2
-      GoalAlign.scale: 25.0
-      GoalAlign.forward_point_distance: 0.2
-      PathDist.scale: 20.0
-      GoalDist.scale: 30.0
-      RotateToGoal.scale: 20.0
-      RotateToGoal.xy_goal_tolerance: 0.3
-      RotateToGoal.slowing_factor: 3.0
+      # Balanced weights for smooth navigation with forward movement preference
+      BaseObstacle.scale: 0.05
+      PathAlign.scale: 25.0
+      PathAlign.forward_point_distance: 0.3
+      GoalAlign.scale: 30.0
+      GoalAlign.forward_point_distance: 0.3
+      PathDist.scale: 25.0
+      GoalDist.scale: 35.0
+      RotateToGoal.scale: 50.0
+      RotateToGoal.xy_goal_tolerance: 0.5
+      RotateToGoal.slowing_factor: 1.5
       RotateToGoal.lookahead_time: -1.0
 
 local_costmap:
   local_costmap:
     ros__parameters:
-      update_frequency: 10.0
-      publish_frequency: 10.0
+      update_frequency: 15.0
+      publish_frequency: 15.0
       global_frame: odom
       robot_base_frame: base_link
       use_sim_time: True
       rolling_window: true
       width: 20
       height: 20
-      resolution: 0.05
-      # Accurate Husky footprint: 0.99m x 0.57m + small safety margin
-      footprint: "[ [0.55, 0.35], [0.55, -0.35], [-0.55, -0.35], [-0.55, 0.35] ]"
+      resolution: 0.025
+      # Conservative Husky footprint: 0.99m x 0.57m + extra safety margin for forest navigation
+      footprint: "[ [0.65, 0.45], [0.65, -0.45], [-0.65, -0.45], [-0.65, 0.45] ]"
       # Add transform tolerance to handle timing issues
       transform_tolerance: 0.5
       plugins: ["obstacle_layer", "inflation_layer"]
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
-        cost_scaling_factor: 3.0
-        inflation_radius: 1.2
+        cost_scaling_factor: 6.0
+        inflation_radius: 3.0
       obstacle_layer:
         plugin: "nav2_costmap_2d::ObstacleLayer"
         enabled: True
         observation_sources: scan
         scan:
           topic: /husky/scan
-          max_obstacle_height: 2.0
+          max_obstacle_height: 3.0
           clearing: True
           marking: True
           data_type: "LaserScan"
-          raytrace_max_range: 15.0
-          raytrace_min_range: 0.1
-          obstacle_max_range: 8.0
-          obstacle_min_range: 0.1
-          # Add sensor frame to help with transforms
-          sensor_frame: ""
-          # Increase clearing threshold to be more robust
-          clearing_threshold: 2
+          raytrace_max_range: 30.0
+          raytrace_min_range: 0.02
+          obstacle_max_range: 15.0
+          obstacle_min_range: 0.02
+          # sensor_frame specifies the tf frame in which the data is published.
+          # You can set it to the frame_id from your LaserScan message, for example:
+          # - "base_laser" (common default for 2D lidar)
+          # - "base_scan"  (if your robot uses this name)
+          # - "lidar_link" (if lidar is mounted on a specific link)
+          # - "base_link"  (if the scan is published in robot base frame)
+          # If empty, the sensor_frame will be inferred from the LaserScan message's header.frame_id.
+          sensor_frame: "base_scan"
+          # More sensitive detection for close obstacles
+          clearing_threshold: 1
           marking_threshold: 0
       static_layer:
         plugin: "nav2_costmap_2d::StaticLayer"
@@ -239,8 +245,8 @@ global_costmap:
       global_frame: map
       robot_base_frame: base_link
       use_sim_time: True
-      # Accurate Husky footprint: 0.99m x 0.57m + small safety margin
-      footprint: "[ [0.55, 0.35], [0.55, -0.35], [-0.55, -0.35], [-0.55, 0.35] ]"
+      # Conservative Husky footprint: 0.99m x 0.57m + extra safety margin for forest navigation
+      footprint: "[ [0.65, 0.45], [0.65, -0.45], [-0.65, -0.45], [-0.65, 0.45] ]"
       # Use slightly coarser resolution to reduce memory usage and improve bounds handling
       resolution: 0.05
       track_unknown_space: true
@@ -263,23 +269,23 @@ global_costmap:
         observation_sources: scan
         scan:
           topic: /husky/scan
-          max_obstacle_height: 2.0
+          max_obstacle_height: 3.0
           clearing: True
           marking: True
           data_type: "LaserScan"
-          raytrace_max_range: 15.0
-          raytrace_min_range: 0.1
-          obstacle_max_range: 8.0
-          obstacle_min_range: 0.1
-          # Add sensor frame to help with transforms
-          sensor_frame: ""
-          # Increase clearing threshold to be more robust
-          clearing_threshold: 2
+          raytrace_max_range: 30.0
+          raytrace_min_range: 0.02
+          obstacle_max_range: 15.0
+          obstacle_min_range: 0.02
+          # Consistent sensor frame for proper transforms
+          sensor_frame: "base_scan"
+          # More sensitive detection for close obstacles
+          clearing_threshold: 1
           marking_threshold: 0
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
-        cost_scaling_factor: 3.0
-        inflation_radius: 1.2
+        cost_scaling_factor: 6.0
+        inflation_radius: 3.0
       always_send_full_costmap: True
 
 map_server:
@@ -365,10 +371,10 @@ velocity_smoother:
     smoothing_frequency: 20.0
     scale_velocities: False
     feedback: "OPEN_LOOP"
-    max_velocity: [1.5, 0.0, 1.0]
-    min_velocity: [-1.5, 0.0, -1.0]
-    max_accel: [1.5, 0.0, 2.0]
-    max_decel: [-1.5, 0.0, -2.0]
+    max_velocity: [1.2, 0.0, 4.0]
+    min_velocity: [0.0, 0.0, -4.0]
+    max_accel: [1.0, 0.0, 6.0]
+    max_decel: [-1.0, 0.0, -6.0]
     odom_topic: "/husky/odometry"
     odom_duration: 0.1
     deadband_velocity: [0.0, 0.0, 0.0]

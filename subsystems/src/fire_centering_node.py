@@ -30,7 +30,7 @@ class FireScanNode(Node):
         
         # Control parameters
         self.declare_parameter('enabled', True)
-        self.declare_parameter('scan_speed', 3.0)  # Increased from 2.5 since we're not stopping
+        self.declare_parameter('scan_speed', 5.0)  # Increased for faster scanning
         self.declare_parameter('target_height', 14.0)
         self.declare_parameter('height_tolerance', 0.5)
         self.declare_parameter('auto_search', False)  # Start search automatically or wait for trigger
@@ -254,7 +254,7 @@ class FireScanNode(Node):
         distance = math.sqrt(dx**2 + dy**2)
         
         # Move to next waypoint when close (no stopping)
-        if distance < 1.0:  # Reduced threshold since we're not stopping
+        if distance < 2.0:  # Increased threshold to reduce frequent waypoint switching
             self.current_waypoint += 1
             if self.current_waypoint < len(self.search_waypoints):
                 self.get_logger().info(f"Waypoint {self.current_waypoint}/{len(self.search_waypoints)}")
@@ -262,12 +262,12 @@ class FireScanNode(Node):
         
         # Smooth velocity control with proportional gain
         # Velocity reduces as we get closer to waypoint for smooth transitions
-        speed_factor = min(1.0, distance / 3.0)  # Slow down within 3m for smooth turns
+        speed_factor = min(1.0, distance / 1.0)  # Only slow down within 1m for smoother operation
         cmd.linear.x = (dx / distance) * self.scan_speed * speed_factor
         cmd.linear.y = (dy / distance) * self.scan_speed * speed_factor
         
         # Apply velocity limits
-        max_vel = 2.0  # Slightly higher to accommodate faster scan speed
+        max_vel = 4.0  # Increased to allow faster scan speed
         cmd.linear.x = max(-max_vel, min(max_vel, cmd.linear.x))
         cmd.linear.y = max(-max_vel, min(max_vel, cmd.linear.y))
         
