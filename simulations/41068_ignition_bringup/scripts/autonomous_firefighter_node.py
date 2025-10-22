@@ -63,6 +63,9 @@ class AutonomousFirefighter(Node):
         self.declare_parameter('stuck_velocity_threshold', 0.05)  # Velocity threshold for stuck detection (m/s)
         self.declare_parameter('fallback_distance', 2.5)  # Distance to fire to consider "close enough" (meters)
         self.declare_parameter('fire_match_tolerance', 1.0)  # Distance tolerance for matching fire positions (meters)
+        self.last_skip_time = 0.0  # Cooldown for skipping fires
+        self.skip_cooldown = 2.0  # Seconds to wait after skipping a fire
+
 
         self.target_distance = self.get_parameter('target_distance').value
         self.distance_tolerance = self.get_parameter('distance_tolerance').value
@@ -447,6 +450,11 @@ class AutonomousFirefighter(Node):
 
             # Reset stuck detection on state transitions
             self.stuck_start_time = None
+            
+            # Clear navigation state when leaving navigation states
+            if self.previous_state in [FirefighterState.NAVIGATING, FirefighterState.APPROACHING]:
+                if new_state not in [FirefighterState.NAVIGATING, FirefighterState.APPROACHING]:
+                    self.navigation_result = None
 
             self.get_logger().info(f'STATE TRANSITION: {self.previous_state.name} -> {self.state.name}')
 
@@ -480,6 +488,11 @@ class AutonomousFirefighter(Node):
 
     def handle_planning_state(self):
         """PLANNING state: Sort and prioritize fires"""
+        # Check cooldown after skipping a fire
+        time_since_skip = time.time() - self.last_skip_time
+        if time_since_skip < self.skip_cooldown:
+            return  # Wait before replanning
+        
         if len(self.detected_fires) == 0:
             self.get_logger().info('No fires to extinguish. Returning to IDLE.')
             self.transition_to_state(FirefighterState.IDLE)
@@ -509,6 +522,7 @@ class AutonomousFirefighter(Node):
             self.current_target_fire = self.fire_queue.pop(0)
             self.transition_to_state(FirefighterState.NAVIGATING)
 
+
     def handle_navigating_state(self):
         """NAVIGATING state: Move to fire location"""
         if self.current_target_fire is None:
@@ -523,17 +537,18 @@ class AutonomousFirefighter(Node):
             # Cancel current goal if active
             if self.current_goal_handle is not None:
                 self.current_goal_handle.cancel_goal_async()
-            self.current_goal_handle = None
+                self.current_goal_handle = None
             self.navigation_result = None
             self.transition_to_state(FirefighterState.EXTINGUISHING)
             return
         elif stuck_check == 'skip_fire':
             # Too far, skip this fire and try next
             self.get_logger().warn('Skipping unreachable fire, moving to next target.')
+            self.last_skip_time = time.time()
             # Cancel current goal if active
             if self.current_goal_handle is not None:
                 self.current_goal_handle.cancel_goal_async()
-            self.current_goal_handle = None
+                self.current_goal_handle = None
             self.navigation_result = None
             self.current_target_fire = None
             self.transition_to_state(FirefighterState.PLANNING)
@@ -541,18 +556,19 @@ class AutonomousFirefighter(Node):
 
         # Check if we need to send a goal
         if self.current_goal_handle is None and self.navigation_result is None:
-            # Calculate approach position (1.5m before fire)
+            # Calculate approach position
             approach_pose = self.calculate_approach_pose(self.current_target_fire)
             self.send_navigation_goal(approach_pose)
             return
 
-        # Check navigation status
+        # Check navigation status - only if result is set
         if self.navigation_result is not None:
             if self.navigation_result:
                 self.get_logger().info('Navigation successful! Transitioning to APPROACHING.')
                 self.transition_to_state(FirefighterState.APPROACHING)
             else:
                 self.get_logger().warn('Navigation failed! Skipping this fire.')
+                self.last_skip_time = time.time()
                 self.current_target_fire = None
                 self.transition_to_state(FirefighterState.PLANNING)
 
@@ -717,18 +733,19 @@ class AutonomousFirefighter(Node):
         return True
 
     def goal_response_callback(self, future):
-        """Handle goal response"""
-        goal_handle = future.result()
-        if not goal_handle.accepted:
-            self.get_logger().error('Goal rejected!')
-            self.navigation_result = False
+        """Handle goal completion"""
+        # Only process if we're still in a navigation-related state
+        if self.state not in [FirefighterState.NAVIGATING, FirefighterState.APPROACHING]:
+            self.get_logger().info('Ignoring stale navigation result from previous goal')
             return
+        
+        result = future.result()
+        self.navigation_result = (result.status == 4)  # 4 = SUCCEEDED
 
-        self.get_logger().info('Goal accepted! Navigating...')
-        self.current_goal_handle = goal_handle
-
-        result_future = goal_handle.get_result_async()
-        result_future.add_done_callback(self.goal_result_callback)
+        if self.navigation_result:
+            self.get_logger().info('Navigation goal reached!')
+        else:
+            self.get_logger().warn(f'Navigation goal failed with status: {result.status}')
 
     def goal_result_callback(self, future):
         """Handle goal completion"""
