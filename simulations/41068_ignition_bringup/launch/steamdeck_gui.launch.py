@@ -28,10 +28,10 @@ def generate_launch_description():
         DeclareLaunchArgument('joy_dev', default_value='/dev/input/js0'),
 
         # Default topics (override per your system)
-        DeclareLaunchArgument('drone_rgb_topic', default_value='/drone/camera/rgb/image_raw'),
-        DeclareLaunchArgument('drone_depth_topic', default_value='/drone/camera/depth/image_raw'),
-        DeclareLaunchArgument('husky_rgb_topic', default_value='/husky/camera/rgb/image_raw'),
-        DeclareLaunchArgument('husky_depth_topic', default_value='/husky/camera/depth/image_raw'),
+        DeclareLaunchArgument('drone_rgb_topic', default_value='/drone/camera/image'),
+        DeclareLaunchArgument('drone_depth_topic', default_value='/drone/camera/depth/image'),
+        DeclareLaunchArgument('husky_rgb_topic', default_value='/husky/camera/image'),
+        DeclareLaunchArgument('husky_depth_topic', default_value='/husky/camera/depth/image'),
         DeclareLaunchArgument('teleop_status_topic', default_value='/teleop_status'),
 
         # Joystick driver

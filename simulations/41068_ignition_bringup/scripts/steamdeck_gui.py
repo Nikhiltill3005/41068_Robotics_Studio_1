@@ -35,11 +35,11 @@ class SteamDeckGui(Node):
 
         # Parameters (defaults can be overridden via launch)
         # Drone
-        self.declare_parameter('drone_rgb_topic', '/drone/camera/rgb/image_raw')
-        self.declare_parameter('drone_depth_topic', '/drone/camera/depth/image_raw')
+        self.declare_parameter('drone_rgb_topic', '/drone/camera/image')
+        self.declare_parameter('drone_depth_topic', '/drone/camera/depth/image')
         # Husky
-        self.declare_parameter('husky_rgb_topic', '/husky/camera/rgb/image_raw')
-        self.declare_parameter('husky_depth_topic', '/husky/camera/depth/image_raw')
+        self.declare_parameter('husky_rgb_topic', '/husky/camera/image')
+        self.declare_parameter('husky_depth_topic', '/husky/camera/depth/image')
         # Teleop status topic (from combined_joy_teleop)
         self.declare_parameter('teleop_status_topic', '/teleop_status')
 
