@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument
+from launch.actions import DeclareLaunchArgument, ExecuteProcess
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
+from ament_index_python.packages import get_package_share_directory
+import os
 
 
 def generate_launch_description():
@@ -17,6 +19,9 @@ def generate_launch_description():
     husky_depth = LaunchConfiguration('husky_depth_topic')
     teleop_status = LaunchConfiguration('teleop_status_topic')
 
+
+    pkg_share = get_package_share_directory('41068_ignition_bringup')
+    gui_script = os.path.join(pkg_share, 'scripts', 'steamdeck_gui.py')
 
     return LaunchDescription([
         DeclareLaunchArgument('use_sim_time', default_value='true'),
@@ -80,19 +85,18 @@ def generate_launch_description():
             }]
         ),
 
-        # GUI node (installed via this package)
-        Node(
-            package='41068_ignition_bringup',
-            executable='steamdeck_gui.py',
-            name='steamdeck_gui',
-            output='screen',
-            parameters=[{
-                'drone_rgb_topic': drone_rgb,
-                'drone_depth_topic': drone_depth,
-                'husky_rgb_topic': husky_rgb,
-                'husky_depth_topic': husky_depth,
-                'teleop_status_topic': teleop_status,
-            }]
+        # GUI process (run via python3 to avoid executable path issues)
+        ExecuteProcess(
+            cmd=[
+                'python3', gui_script,
+                '--ros-args',
+                '-p', ['drone_rgb_topic:=', drone_rgb],
+                '-p', ['drone_depth_topic:=', drone_depth],
+                '-p', ['husky_rgb_topic:=', husky_rgb],
+                '-p', ['husky_depth_topic:=', husky_depth],
+                '-p', ['teleop_status_topic:=', teleop_status],
+            ],
+            output='screen'
         ),
     ])
 
