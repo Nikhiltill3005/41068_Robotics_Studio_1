@@ -1,0 +1,2 @@
+# This package is ignored to speed up Steam Deck builds (Gazebo/Ignition not required).
+

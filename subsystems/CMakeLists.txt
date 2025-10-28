@@ -14,26 +14,11 @@ find_package(std_msgs REQUIRED)
 find_package(nav_msgs REQUIRED)
 
 # Create executables
-add_executable(drone_joy_teleop src/drone_joy_teleop.cpp)
+# On Steam Deck we only need the combined_joy_teleop to drive both robots.
 add_executable(combined_joy_teleop src/combined_joy_teleop.cpp)
-add_executable(drone_keyboard_teleop src/drone_keyboard_teleop.cpp)
 
 # Specify libraries to link a library or executable target against
-ament_target_dependencies(drone_joy_teleop
-  rclcpp
-  geometry_msgs
-  sensor_msgs
-  std_msgs
-)
-
 ament_target_dependencies(combined_joy_teleop
-  rclcpp
-  geometry_msgs
-  sensor_msgs
-  std_msgs
-)
-
-ament_target_dependencies(drone_keyboard_teleop
   rclcpp
   geometry_msgs
   sensor_msgs
@@ -42,9 +27,7 @@ ament_target_dependencies(drone_keyboard_teleop
 
 # Install targets
 install(TARGETS
-  drone_joy_teleop
   combined_joy_teleop
-  drone_keyboard_teleop
   DESTINATION lib/${PROJECT_NAME}
 )
 
