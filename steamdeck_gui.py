@@ -26,8 +26,8 @@ import numpy as np
 
 import rclpy
 from rclpy.node import Node
-from rclpy.qos import qos_profile_sensor_data, QoSProfile, QoSReliabilityPolicy, QoSHistoryPolicy
-from sensor_msgs.msg import Image as ROSImage, Joy
+from rclpy.qos import qos_profile_sensor_data, QoSProfile, QoSReliabilityPolicy, QoSHistoryPolicy, QoSDurabilityPolicy
+from sensor_msgs.msg import Image as ROSImage, Joy, CompressedImage
 from nav_msgs.msg import OccupancyGrid, Odometry
 from geometry_msgs.msg import PoseArray
 from std_msgs.msg import String as ROSString
@@ -85,7 +85,7 @@ class SteamDeckGui(Node):
 
         # Queues for incoming frames
         self.queues = {k: queue.Queue(maxsize=1) for k in ['husky_rgb', 'drone_rgb', 'drone_ir', 'slam_map']}
-        self._throttle_n = 2
+        self._throttle_n = 5  # Skip more frames to reduce lag
         self._counters = {k: 0 for k in ['husky_rgb', 'drone_rgb', 'drone_ir', 'slam_map']}
 
         # Camera switching state (RB=Husky, LB=Drone)
@@ -115,16 +115,26 @@ class SteamDeckGui(Node):
         # Build UI
         self._build_ui()
 
-        # Subscriptions
-        self.create_subscription(ROSImage, self.topics['husky_rgb'], 
-                                lambda m: self._on_image(m, 'husky_rgb'), qos_profile_sensor_data)
-        self.create_subscription(ROSImage, self.topics['drone_rgb'], 
-                                lambda m: self._on_image(m, 'drone_rgb'), qos_profile_sensor_data)
-        self.create_subscription(ROSImage, self.topics['drone_ir'], 
-                                lambda m: self._on_image(m, 'drone_ir'), qos_profile_sensor_data)
+        # Optimized QoS for low-latency image transport
+        image_qos = QoSProfile(
+            reliability=QoSReliabilityPolicy.BEST_EFFORT,
+            durability=QoSDurabilityPolicy.VOLATILE,
+            history=QoSHistoryPolicy.KEEP_LAST,
+            depth=1  # Only keep latest message
+        )
+
+        # Subscribe to COMPRESSED image topics for much better network performance
+        self.create_subscription(CompressedImage, self.topics['husky_rgb'] + '/compressed', 
+                                lambda m: self._on_compressed_image(m, 'husky_rgb'), image_qos)
+        self.create_subscription(CompressedImage, self.topics['drone_rgb'] + '/compressed', 
+                                lambda m: self._on_compressed_image(m, 'drone_rgb'), image_qos)
+        self.create_subscription(CompressedImage, self.topics['drone_ir'] + '/compressed', 
+                                lambda m: self._on_compressed_image(m, 'drone_ir'), image_qos)
         
         # Joystick subscription for camera switching
         self.create_subscription(Joy, self.topics['joy'], self._on_joy, 10)
+        
+        self.get_logger().info("Subscribed to COMPRESSED image topics for low-latency streaming")
         
         # SLAM map subscription with appropriate QoS
         map_qos = QoSProfile(
@@ -271,7 +281,30 @@ class SteamDeckGui(Node):
         except Exception as e:
             self.get_logger().warn(f'Joy callback error: {e}')
 
+    def _on_compressed_image(self, msg: CompressedImage, key: str) -> None:
+        """Handle compressed image - much faster over network!"""
+        try:
+            self._counters[key] += 1
+            if (self._counters[key] % self._throttle_n) != 0:
+                return
+            
+            # Decode compressed JPEG directly from bytes
+            np_arr = np.frombuffer(msg.data, np.uint8)
+            disp = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+            
+            if disp is None:
+                return
+            
+            try:
+                self.queues[key].get_nowait()
+            except queue.Empty:
+                pass
+            self.queues[key].put_nowait(disp)
+        except Exception as exc:
+            self.get_logger().warn(f'Compressed image decode failed for {key}: {exc}')
+
     def _on_image(self, msg: ROSImage, key: str) -> None:
+        """Fallback for raw images (not used if compressed available)"""
         try:
             self._counters[key] += 1
             if (self._counters[key] % self._throttle_n) != 0:
@@ -425,14 +458,16 @@ class SteamDeckGui(Node):
             self._schedule_map_refresh()
 
     def _update_label_with_frame(self, label: tk.Label, frame_bgr) -> None:
-        # Resize with aspect ratio to fill area
+        # Resize with aspect ratio to fill area - use fixed small size for Steam Deck
         label.update_idletasks()
-        target_w = max(200, label.winfo_width())
-        target_h = max(150, label.winfo_height())
+        target_w = min(480, max(200, label.winfo_width()))  # Cap at 480px for performance
+        target_h = min(360, max(150, label.winfo_height()))  # Cap at 360px for performance
         h, w = frame_bgr.shape[:2]
         scale = min(target_w / w, target_h / h)
         new_w, new_h = max(1, int(w * scale)), max(1, int(h * scale))
-        resized = cv2.resize(frame_bgr, (new_w, new_h), interpolation=cv2.INTER_AREA)
+        
+        # Use INTER_NEAREST for fastest resizing (acceptable for Steam Deck display)
+        resized = cv2.resize(frame_bgr, (new_w, new_h), interpolation=cv2.INTER_NEAREST)
 
         rgb = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
         image = Image.fromarray(rgb)
