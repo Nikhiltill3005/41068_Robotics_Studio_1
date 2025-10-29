@@ -221,6 +221,49 @@ def generate_launch_description():
     )
     ld.add_action(fire_search)
 
+    # Image compression republishers for efficient network transmission
+    # Husky RGB camera
+    husky_rgb_compress = Node(
+        package='image_transport',
+        executable='republish',
+        name='husky_rgb_compress',
+        arguments=['raw', 'compressed'],
+        remappings=[
+            ('in', '/husky/camera/image'),
+            ('out/compressed', '/husky/camera/image/compressed')
+        ],
+        parameters=[{'use_sim_time': use_sim_time}]
+    )
+    ld.add_action(husky_rgb_compress)
+
+    # Drone RGB camera
+    drone_rgb_compress = Node(
+        package='image_transport',
+        executable='republish',
+        name='drone_rgb_compress',
+        arguments=['raw', 'compressed'],
+        remappings=[
+            ('in', '/drone/camera/image'),
+            ('out/compressed', '/drone/camera/image/compressed')
+        ],
+        parameters=[{'use_sim_time': use_sim_time}]
+    )
+    ld.add_action(drone_rgb_compress)
+
+    # Drone IR camera
+    drone_ir_compress = Node(
+        package='image_transport',
+        executable='republish',
+        name='drone_ir_compress',
+        arguments=['raw', 'compressed'],
+        remappings=[
+            ('in', '/drone/ir_camera/image_raw'),
+            ('out/compressed', '/drone/ir_camera/image_raw/compressed')
+        ],
+        parameters=[{'use_sim_time': use_sim_time}]
+    )
+    ld.add_action(drone_ir_compress)
+
     return ld
 
 
