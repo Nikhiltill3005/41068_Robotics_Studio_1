@@ -15,7 +15,6 @@ def generate_launch_description():
     # Topics (can be overridden)
     husky_rgb = LaunchConfiguration('husky_rgb_topic')
     drone_rgb = LaunchConfiguration('drone_rgb_topic')
-    drone_ir = LaunchConfiguration('drone_ir_topic')
     husky_map = LaunchConfiguration('husky_map_topic')
     husky_odom = LaunchConfiguration('husky_odom_topic')
     drone_odom = LaunchConfiguration('drone_odom_topic')
@@ -36,7 +35,6 @@ def generate_launch_description():
         # Default topics (override per your system)
         DeclareLaunchArgument('husky_rgb_topic', default_value='/husky/camera/image'),
         DeclareLaunchArgument('drone_rgb_topic', default_value='/drone/camera/image'),
-        DeclareLaunchArgument('drone_ir_topic', default_value='/drone/ir_camera/image_raw'),
         DeclareLaunchArgument('husky_map_topic', default_value='/husky/map'),
         DeclareLaunchArgument('husky_odom_topic', default_value='/husky/odometry'),
         DeclareLaunchArgument('drone_odom_topic', default_value='/drone/odometry'),
@@ -104,7 +102,6 @@ def generate_launch_description():
                 '--ros-args',
                 '-p', ['husky_rgb_topic:=', husky_rgb],
                 '-p', ['drone_rgb_topic:=', drone_rgb],
-                '-p', ['drone_ir_topic:=', drone_ir],
                 '-p', ['husky_map_topic:=', husky_map],
                 '-p', ['husky_odom_topic:=', husky_odom],
                 '-p', ['drone_odom_topic:=', drone_odom],

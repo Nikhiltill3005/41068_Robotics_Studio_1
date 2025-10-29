@@ -3,10 +3,9 @@
 """
 Steam Deck ROS2 GUI
 
-Optimized layout for 1280x800 (Steam Deck) with four panes:
+Optimized layout for 1280x800 (Steam Deck) with three panes:
   - SLAM Map (Husky)
-  - Husky RGB Camera
-  - Drone IR Camera
+  - Switchable RGB Camera (Husky/Drone - toggle with LB/RB)
   - 2D Terrain Map (robot positions, fires, paths)
 
 Subscribes to teleop status from the combined joystick teleop node.
@@ -49,7 +48,6 @@ class SteamDeckGui(Node):
         # Parameters (defaults can be overridden via launch)
         self.declare_parameter('husky_rgb_topic', '/husky/camera/image')
         self.declare_parameter('drone_rgb_topic', '/drone/camera/image')
-        self.declare_parameter('drone_ir_topic', '/drone/ir_camera/image_raw')
         self.declare_parameter('husky_map_topic', '/husky/map')
         self.declare_parameter('husky_odom_topic', '/husky/odometry')
         self.declare_parameter('drone_odom_topic', '/drone/odometry')
@@ -62,7 +60,6 @@ class SteamDeckGui(Node):
         self.topics = {
             'husky_rgb': self.get_parameter('husky_rgb_topic').get_parameter_value().string_value,
             'drone_rgb': self.get_parameter('drone_rgb_topic').get_parameter_value().string_value,
-            'drone_ir': self.get_parameter('drone_ir_topic').get_parameter_value().string_value,
             'husky_map': self.get_parameter('husky_map_topic').get_parameter_value().string_value,
             'husky_odom': self.get_parameter('husky_odom_topic').get_parameter_value().string_value,
             'drone_odom': self.get_parameter('drone_odom_topic').get_parameter_value().string_value,
@@ -84,9 +81,9 @@ class SteamDeckGui(Node):
             pass
 
         # Queues for incoming frames
-        self.queues = {k: queue.Queue(maxsize=1) for k in ['husky_rgb', 'drone_rgb', 'drone_ir', 'slam_map']}
+        self.queues = {k: queue.Queue(maxsize=1) for k in ['husky_rgb', 'drone_rgb', 'slam_map']}
         self._throttle_n = 5  # Skip more frames to reduce lag
-        self._counters = {k: 0 for k in ['husky_rgb', 'drone_rgb', 'drone_ir', 'slam_map']}
+        self._counters = {k: 0 for k in ['husky_rgb', 'drone_rgb', 'slam_map']}
 
         # Camera switching state (RB=Husky, LB=Drone)
         self.active_rgb_camera = 'husky'  # 'husky' or 'drone'
@@ -128,8 +125,6 @@ class SteamDeckGui(Node):
                                 lambda m: self._on_compressed_image(m, 'husky_rgb'), image_qos)
         self.create_subscription(CompressedImage, self.topics['drone_rgb'] + '/compressed', 
                                 lambda m: self._on_compressed_image(m, 'drone_rgb'), image_qos)
-        self.create_subscription(CompressedImage, self.topics['drone_ir'] + '/compressed', 
-                                lambda m: self._on_compressed_image(m, 'drone_ir'), image_qos)
         
         # Joystick subscription for camera switching
         self.create_subscription(Joy, self.topics['joy'], self._on_joy, 10)
@@ -184,20 +179,32 @@ class SteamDeckGui(Node):
         style.configure('Dark.TLabel', background=BG, foreground=TEXT)
         style.configure('Panel.TLabel', background=PANEL, foreground=TEXT)
 
-        # Top bar
+        # Top bar with teleop status button
         top = ttk.Frame(self.root, padding=8, style='Dark.TFrame')
         top.pack(fill=tk.X)
-        self.status_label = ttk.Label(top, text='Teleop: —', style='Dark.TLabel', 
-                                      font=('Segoe UI', 12, 'bold'))
-        self.status_label.pack(side=tk.LEFT)
+        
+        # Teleop status button (changes color when active)
+        self.teleop_active = False
+        self.teleop_button = tk.Button(
+            top, 
+            text='Teleop Inactive', 
+            bg='#555555',  # Gray when inactive
+            fg='white',
+            font=('Segoe UI', 12, 'bold'),
+            relief='flat',
+            padx=15,
+            pady=5,
+            state='disabled'  # Not clickable, just visual indicator
+        )
+        self.teleop_button.pack(side=tk.LEFT)
 
-        # 2x2 grid layout
+        # Grid layout: 2 columns on top, 1 wide map on bottom
         grid = ttk.Frame(self.root, padding=8, style='Dark.TFrame')
         grid.pack(fill=tk.BOTH, expand=True)
         for c in range(2):
             grid.columnconfigure(c, weight=1)
-        for r in range(2):
-            grid.rowconfigure(r, weight=1)
+        grid.rowconfigure(0, weight=1)
+        grid.rowconfigure(1, weight=1)
 
         # Helper function to create panels
         def make_panel(parent, title: str, use_canvas=False):
@@ -228,11 +235,7 @@ class SteamDeckGui(Node):
         self.lbl_switchable_rgb.pack(fill=tk.BOTH, expand=True, pady=(6, 0))
         p01.grid(row=0, column=1, sticky='nsew', padx=(6, 0), pady=(0, 6))
 
-        # Bottom-left: Drone IR
-        p10, self.lbl_drone_ir = make_panel(grid, 'Drone IR')
-        p10.grid(row=1, column=0, sticky='nsew', padx=(0, 6), pady=(6, 0))
-
-        # Bottom-right: 2D Terrain Map
+        # Bottom: 2D Terrain Map (spans full width)
         p11, _ = make_panel(grid, '2D Map (Terrain)', use_canvas=True)
         self.fig, self.ax = plt.subplots(figsize=(5, 4))
         self.fig.patch.set_facecolor(PANEL)
@@ -246,12 +249,28 @@ class SteamDeckGui(Node):
             spine.set_color(TEXT)
         self.canvas = FigureCanvasTkAgg(self.fig, master=p11)
         self.canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True, pady=(6, 0))
-        p11.grid(row=1, column=1, sticky='nsew', padx=(6, 0), pady=(6, 0))
+        p11.grid(row=1, column=0, columnspan=2, sticky='nsew', pady=(6, 0))
 
     def _on_status(self, msg: ROSString) -> None:
         try:
             text = msg.data if isinstance(msg.data, str) else str(msg.data)
-            self.status_label.configure(text=f'Teleop: {text}')
+            # Check if teleop is active (contains "Hold" indicating user should hold a button)
+            is_active = "Hold" in text
+            
+            if is_active and not self.teleop_active:
+                # Switched to active
+                self.teleop_button.configure(
+                    text='Teleop Active',
+                    bg='#00cc00'  # Bright green when active
+                )
+                self.teleop_active = True
+            elif not is_active and self.teleop_active:
+                # Switched to inactive
+                self.teleop_button.configure(
+                    text='Teleop Inactive',
+                    bg='#555555'  # Gray when inactive
+                )
+                self.teleop_active = False
         except Exception:
             pass
 
@@ -385,9 +404,8 @@ class SteamDeckGui(Node):
             if frame is not None:
                 self._update_label_with_frame(self.lbl_switchable_rgb, frame)
             
-            # Update other camera feeds
+            # Update SLAM map
             mapping = [
-                ('drone_ir', self.lbl_drone_ir),
                 ('slam_map', self.lbl_slam_map),
             ]
             for key, label in mapping:
