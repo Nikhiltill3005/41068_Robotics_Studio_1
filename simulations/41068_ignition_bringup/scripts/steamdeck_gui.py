@@ -27,7 +27,7 @@ import numpy as np
 import rclpy
 from rclpy.node import Node
 from rclpy.qos import qos_profile_sensor_data, QoSProfile, QoSReliabilityPolicy, QoSHistoryPolicy
-from sensor_msgs.msg import Image as ROSImage
+from sensor_msgs.msg import Image as ROSImage, Joy
 from nav_msgs.msg import OccupancyGrid, Odometry
 from geometry_msgs.msg import PoseArray
 from std_msgs.msg import String as ROSString
@@ -48,23 +48,27 @@ class SteamDeckGui(Node):
 
         # Parameters (defaults can be overridden via launch)
         self.declare_parameter('husky_rgb_topic', '/husky/camera/image')
+        self.declare_parameter('drone_rgb_topic', '/drone/camera/image')
         self.declare_parameter('drone_ir_topic', '/drone/ir_camera/image_raw')
         self.declare_parameter('husky_map_topic', '/husky/map')
         self.declare_parameter('husky_odom_topic', '/husky/odometry')
         self.declare_parameter('drone_odom_topic', '/drone/odometry')
         self.declare_parameter('fire_topic', '/drone/fire_scan/fire_positions')
         self.declare_parameter('teleop_status_topic', '/teleop_status')
+        self.declare_parameter('joy_topic', '/joy')
         self.declare_parameter('world_size', 50.0)
         self.declare_parameter('terrain_image', 'bushland_terrain.png')
 
         self.topics = {
             'husky_rgb': self.get_parameter('husky_rgb_topic').get_parameter_value().string_value,
+            'drone_rgb': self.get_parameter('drone_rgb_topic').get_parameter_value().string_value,
             'drone_ir': self.get_parameter('drone_ir_topic').get_parameter_value().string_value,
             'husky_map': self.get_parameter('husky_map_topic').get_parameter_value().string_value,
             'husky_odom': self.get_parameter('husky_odom_topic').get_parameter_value().string_value,
             'drone_odom': self.get_parameter('drone_odom_topic').get_parameter_value().string_value,
             'fires': self.get_parameter('fire_topic').get_parameter_value().string_value,
             'teleop_status': self.get_parameter('teleop_status_topic').get_parameter_value().string_value,
+            'joy': self.get_parameter('joy_topic').get_parameter_value().string_value,
         }
         self.world_size = self.get_parameter('world_size').get_parameter_value().double_value
         self.terrain_image_path = self.get_parameter('terrain_image').get_parameter_value().string_value
@@ -80,9 +84,14 @@ class SteamDeckGui(Node):
             pass
 
         # Queues for incoming frames
-        self.queues = {k: queue.Queue(maxsize=1) for k in ['husky_rgb', 'drone_ir', 'slam_map']}
+        self.queues = {k: queue.Queue(maxsize=1) for k in ['husky_rgb', 'drone_rgb', 'drone_ir', 'slam_map']}
         self._throttle_n = 2
-        self._counters = {k: 0 for k in ['husky_rgb', 'drone_ir', 'slam_map']}
+        self._counters = {k: 0 for k in ['husky_rgb', 'drone_rgb', 'drone_ir', 'slam_map']}
+
+        # Camera switching state (RB=Husky, LB=Drone)
+        self.active_rgb_camera = 'husky'  # 'husky' or 'drone'
+        self.prev_lb_pressed = False
+        self.prev_rb_pressed = False
 
         # Position and path data
         self.positions = {'husky': None, 'drone': None}
@@ -109,8 +118,13 @@ class SteamDeckGui(Node):
         # Subscriptions
         self.create_subscription(ROSImage, self.topics['husky_rgb'], 
                                 lambda m: self._on_image(m, 'husky_rgb'), qos_profile_sensor_data)
+        self.create_subscription(ROSImage, self.topics['drone_rgb'], 
+                                lambda m: self._on_image(m, 'drone_rgb'), qos_profile_sensor_data)
         self.create_subscription(ROSImage, self.topics['drone_ir'], 
                                 lambda m: self._on_image(m, 'drone_ir'), qos_profile_sensor_data)
+        
+        # Joystick subscription for camera switching
+        self.create_subscription(Joy, self.topics['joy'], self._on_joy, 10)
         
         # SLAM map subscription with appropriate QoS
         map_qos = QoSProfile(
@@ -195,8 +209,13 @@ class SteamDeckGui(Node):
         self.lbl_slam_map.pack(fill=tk.BOTH, expand=True, pady=(6, 0))
         p00.grid(row=0, column=0, sticky='nsew', padx=(0, 6), pady=(0, 6))
 
-        # Top-right: Husky RGB
-        p01, self.lbl_husky_rgb = make_panel(grid, 'Husky RGB')
+        # Top-right: Switchable RGB Camera (Husky or Drone)
+        p01 = ttk.Frame(grid, padding=8, style='Panel.TFrame')
+        self.rgb_camera_header = ttk.Label(p01, text='RGB: Husky (RB=Husky | LB=Drone)', 
+                                           style='Panel.TLabel', font=('Segoe UI', 11, 'bold'))
+        self.rgb_camera_header.pack(anchor='w')
+        self.lbl_switchable_rgb = tk.Label(p01, bg='black', fg='white', text='Waiting...')
+        self.lbl_switchable_rgb.pack(fill=tk.BOTH, expand=True, pady=(6, 0))
         p01.grid(row=0, column=1, sticky='nsew', padx=(6, 0), pady=(0, 6))
 
         # Bottom-left: Drone IR
@@ -225,6 +244,32 @@ class SteamDeckGui(Node):
             self.status_label.configure(text=f'Teleop: {text}')
         except Exception:
             pass
+
+    def _on_joy(self, msg: Joy) -> None:
+        """Handle joystick input for camera switching.
+        Button 4 (LB) = Drone RGB
+        Button 5 (RB) = Husky RGB
+        """
+        try:
+            if len(msg.buttons) > 5:
+                lb_pressed = msg.buttons[4] == 1  # Left bumper
+                rb_pressed = msg.buttons[5] == 1  # Right bumper
+                
+                # Detect rising edge (button just pressed)
+                if lb_pressed and not self.prev_lb_pressed:
+                    self.active_rgb_camera = 'drone'
+                    self.rgb_camera_header.configure(text='RGB: Drone (RB=Husky | LB=Drone)')
+                    self.get_logger().info('Switched RGB camera to DRONE')
+                
+                elif rb_pressed and not self.prev_rb_pressed:
+                    self.active_rgb_camera = 'husky'
+                    self.rgb_camera_header.configure(text='RGB: Husky (RB=Husky | LB=Drone)')
+                    self.get_logger().info('Switched RGB camera to HUSKY')
+                
+                self.prev_lb_pressed = lb_pressed
+                self.prev_rb_pressed = rb_pressed
+        except Exception as e:
+            self.get_logger().warn(f'Joy callback error: {e}')
 
     def _on_image(self, msg: ROSImage, key: str) -> None:
         try:
@@ -297,9 +342,18 @@ class SteamDeckGui(Node):
 
     def _refresh(self) -> None:
         try:
-            # Update camera feeds
+            # Update switchable RGB camera based on active selection
+            rgb_key = f'{self.active_rgb_camera}_rgb'
+            frame = None
+            try:
+                frame = self.queues[rgb_key].get_nowait()
+            except queue.Empty:
+                pass
+            if frame is not None:
+                self._update_label_with_frame(self.lbl_switchable_rgb, frame)
+            
+            # Update other camera feeds
             mapping = [
-                ('husky_rgb', self.lbl_husky_rgb),
                 ('drone_ir', self.lbl_drone_ir),
                 ('slam_map', self.lbl_slam_map),
             ]

@@ -14,12 +14,14 @@ def generate_launch_description():
 
     # Topics (can be overridden)
     husky_rgb = LaunchConfiguration('husky_rgb_topic')
+    drone_rgb = LaunchConfiguration('drone_rgb_topic')
     drone_ir = LaunchConfiguration('drone_ir_topic')
     husky_map = LaunchConfiguration('husky_map_topic')
     husky_odom = LaunchConfiguration('husky_odom_topic')
     drone_odom = LaunchConfiguration('drone_odom_topic')
     fire_topic = LaunchConfiguration('fire_topic')
     teleop_status = LaunchConfiguration('teleop_status_topic')
+    joy_topic = LaunchConfiguration('joy_topic')
     world_size = LaunchConfiguration('world_size')
     terrain_image = LaunchConfiguration('terrain_image')
 
@@ -33,12 +35,14 @@ def generate_launch_description():
 
         # Default topics (override per your system)
         DeclareLaunchArgument('husky_rgb_topic', default_value='/husky/camera/image'),
+        DeclareLaunchArgument('drone_rgb_topic', default_value='/drone/camera/image'),
         DeclareLaunchArgument('drone_ir_topic', default_value='/drone/ir_camera/image_raw'),
         DeclareLaunchArgument('husky_map_topic', default_value='/husky/map'),
         DeclareLaunchArgument('husky_odom_topic', default_value='/husky/odometry'),
         DeclareLaunchArgument('drone_odom_topic', default_value='/drone/odometry'),
         DeclareLaunchArgument('fire_topic', default_value='/drone/fire_scan/fire_positions'),
         DeclareLaunchArgument('teleop_status_topic', default_value='/teleop_status'),
+        DeclareLaunchArgument('joy_topic', default_value='/joy'),
         DeclareLaunchArgument('world_size', default_value='50.0'),
         DeclareLaunchArgument('terrain_image', default_value='bushland_terrain.png'),
 
@@ -99,12 +103,14 @@ def generate_launch_description():
                 'python3', gui_script,
                 '--ros-args',
                 '-p', ['husky_rgb_topic:=', husky_rgb],
+                '-p', ['drone_rgb_topic:=', drone_rgb],
                 '-p', ['drone_ir_topic:=', drone_ir],
                 '-p', ['husky_map_topic:=', husky_map],
                 '-p', ['husky_odom_topic:=', husky_odom],
                 '-p', ['drone_odom_topic:=', drone_odom],
                 '-p', ['fire_topic:=', fire_topic],
                 '-p', ['teleop_status_topic:=', teleop_status],
+                '-p', ['joy_topic:=', joy_topic],
                 '-p', ['world_size:=', world_size],
                 '-p', ['terrain_image:=', terrain_image],
             ],
