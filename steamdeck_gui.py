@@ -4,14 +4,15 @@
 Steam Deck ROS2 GUI
 
 Optimized layout for 1280x800 (Steam Deck) with three panes:
-  - SLAM Map (Husky)
-  - Switchable RGB Camera (Husky/Drone - toggle with LB/RB)
-  - 2D Terrain Map (robot positions, fires, paths)
+  - SLAM Map (Husky) - top left
+  - 2D Terrain Map (robot positions, fires, paths) - top right
+  - Switchable RGB Camera (Husky/Drone - toggle via touchscreen button) - bottom (MAIN FOCUS)
 
 Subscribes to teleop status from the combined joystick teleop node.
 All topics are ROS2 parameters for easy override via launch file.
 
 Controls are provided by the existing combined_joy_teleop node (launched separately).
+Camera switching is done via the touchscreen button in the GUI header.
 """
 
 import os
@@ -85,10 +86,8 @@ class SteamDeckGui(Node):
         self._throttle_n = 5  # Skip more frames to reduce lag
         self._counters = {k: 0 for k in ['husky_rgb', 'drone_rgb', 'slam_map']}
 
-        # Camera switching state (RB=Husky, LB=Drone)
+        # Camera switching state (toggled via touchscreen button)
         self.active_rgb_camera = 'husky'  # 'husky' or 'drone'
-        self.prev_lb_pressed = False
-        self.prev_rb_pressed = False
 
         # Position and path data
         self.positions = {'husky': None, 'drone': None}
@@ -198,13 +197,13 @@ class SteamDeckGui(Node):
         )
         self.teleop_button.pack(side=tk.LEFT)
 
-        # Grid layout: 2 columns on top, 1 wide map on bottom
+        # Grid layout: 2 columns on top, 1 wide camera on bottom
         grid = ttk.Frame(self.root, padding=8, style='Dark.TFrame')
         grid.pack(fill=tk.BOTH, expand=True)
         for c in range(2):
             grid.columnconfigure(c, weight=1)
-        grid.rowconfigure(0, weight=1)
-        grid.rowconfigure(1, weight=1)
+        grid.rowconfigure(0, weight=1)  # Top row smaller
+        grid.rowconfigure(1, weight=2)  # Bottom row larger (main focus)
 
         # Helper function to create panels
         def make_panel(parent, title: str, use_canvas=False):
@@ -226,17 +225,8 @@ class SteamDeckGui(Node):
         self.lbl_slam_map.pack(fill=tk.BOTH, expand=True, pady=(6, 0))
         p00.grid(row=0, column=0, sticky='nsew', padx=(0, 6), pady=(0, 6))
 
-        # Top-right: Switchable RGB Camera (Husky or Drone)
-        p01 = ttk.Frame(grid, padding=8, style='Panel.TFrame')
-        self.rgb_camera_header = ttk.Label(p01, text='RGB: Husky (RB=Husky | LB=Drone)', 
-                                           style='Panel.TLabel', font=('Segoe UI', 11, 'bold'))
-        self.rgb_camera_header.pack(anchor='w')
-        self.lbl_switchable_rgb = tk.Label(p01, bg='black', fg='white', text='Waiting...')
-        self.lbl_switchable_rgb.pack(fill=tk.BOTH, expand=True, pady=(6, 0))
-        p01.grid(row=0, column=1, sticky='nsew', padx=(6, 0), pady=(0, 6))
-
-        # Bottom: 2D Terrain Map (spans full width)
-        p11, _ = make_panel(grid, '2D Map (Terrain)', use_canvas=True)
+        # Top-right: 2D Terrain Map
+        p01, _ = make_panel(grid, '2D Map (Terrain)', use_canvas=True)
         self.fig, self.ax = plt.subplots(figsize=(5, 4))
         self.fig.patch.set_facecolor(PANEL)
         self.ax.set_facecolor('#2a2a2a')
@@ -247,8 +237,39 @@ class SteamDeckGui(Node):
         self.ax.tick_params(colors=TEXT, labelsize=8)
         for spine in self.ax.spines.values():
             spine.set_color(TEXT)
-        self.canvas = FigureCanvasTkAgg(self.fig, master=p11)
+        self.canvas = FigureCanvasTkAgg(self.fig, master=p01)
         self.canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True, pady=(6, 0))
+        p01.grid(row=0, column=1, sticky='nsew', padx=(6, 0), pady=(0, 6))
+
+        # Bottom: Switchable RGB Camera (spans full width) - MAIN FOCUS
+        p11 = ttk.Frame(grid, padding=8, style='Panel.TFrame')
+        
+        # Header with toggle button
+        header_frame = tk.Frame(p11, bg=PANEL)
+        header_frame.pack(fill=tk.X, anchor='w')
+        
+        self.rgb_camera_header = ttk.Label(header_frame, text='RGB Camera', 
+                                           style='Panel.TLabel', font=('Segoe UI', 11, 'bold'))
+        self.rgb_camera_header.pack(side=tk.LEFT)
+        
+        # Toggle button for switching cameras
+        self.camera_toggle_btn = tk.Button(
+            header_frame,
+            text='Viewing: HUSKY',
+            bg='#2563eb',  # Blue accent
+            fg='white',
+            font=('Segoe UI', 10, 'bold'),
+            relief='flat',
+            padx=12,
+            pady=4,
+            command=self._toggle_camera
+        )
+        self.camera_toggle_btn.pack(side=tk.RIGHT, padx=(10, 0))
+        
+        # Camera display area
+        self.lbl_switchable_rgb = tk.Label(p11, bg='black', fg='white', text='Waiting for camera...')
+        self.lbl_switchable_rgb.pack(fill=tk.BOTH, expand=True, pady=(6, 0))
+        
         p11.grid(row=1, column=0, columnspan=2, sticky='nsew', pady=(6, 0))
 
     def _on_status(self, msg: ROSString) -> None:
@@ -274,31 +295,20 @@ class SteamDeckGui(Node):
         except Exception:
             pass
 
+    def _toggle_camera(self) -> None:
+        """Toggle between Husky and Drone RGB cameras via touchscreen button."""
+        if self.active_rgb_camera == 'husky':
+            self.active_rgb_camera = 'drone'
+            self.camera_toggle_btn.configure(text='Viewing: DRONE', bg='#059669')  # Green for drone
+            self.get_logger().info('Switched RGB camera to DRONE')
+        else:
+            self.active_rgb_camera = 'husky'
+            self.camera_toggle_btn.configure(text='Viewing: HUSKY', bg='#2563eb')  # Blue for husky
+            self.get_logger().info('Switched RGB camera to HUSKY')
+
     def _on_joy(self, msg: Joy) -> None:
-        """Handle joystick input for camera switching.
-        Button 4 (LB) = Drone RGB
-        Button 5 (RB) = Husky RGB
-        """
-        try:
-            if len(msg.buttons) > 5:
-                lb_pressed = msg.buttons[4] == 1  # Left bumper
-                rb_pressed = msg.buttons[5] == 1  # Right bumper
-                
-                # Detect rising edge (button just pressed)
-                if lb_pressed and not self.prev_lb_pressed:
-                    self.active_rgb_camera = 'drone'
-                    self.rgb_camera_header.configure(text='RGB: Drone (RB=Husky | LB=Drone)')
-                    self.get_logger().info('Switched RGB camera to DRONE')
-                
-                elif rb_pressed and not self.prev_rb_pressed:
-                    self.active_rgb_camera = 'husky'
-                    self.rgb_camera_header.configure(text='RGB: Husky (RB=Husky | LB=Drone)')
-                    self.get_logger().info('Switched RGB camera to HUSKY')
-                
-                self.prev_lb_pressed = lb_pressed
-                self.prev_rb_pressed = rb_pressed
-        except Exception as e:
-            self.get_logger().warn(f'Joy callback error: {e}')
+        """Handle joystick input - camera switching removed, now done via touchscreen button."""
+        pass  # Placeholder - joystick no longer switches cameras
 
     def _on_compressed_image(self, msg: CompressedImage, key: str) -> None:
         """Handle compressed image - much faster over network!"""
