@@ -12,12 +12,16 @@ def generate_launch_description():
     use_sim_time = LaunchConfiguration('use_sim_time')
     joy_dev = LaunchConfiguration('joy_dev')
 
-    # Camera topics (can be overridden)
-    drone_rgb = LaunchConfiguration('drone_rgb_topic')
-    drone_depth = LaunchConfiguration('drone_depth_topic')
+    # Topics (can be overridden)
     husky_rgb = LaunchConfiguration('husky_rgb_topic')
-    husky_depth = LaunchConfiguration('husky_depth_topic')
+    drone_ir = LaunchConfiguration('drone_ir_topic')
+    husky_map = LaunchConfiguration('husky_map_topic')
+    husky_odom = LaunchConfiguration('husky_odom_topic')
+    drone_odom = LaunchConfiguration('drone_odom_topic')
+    fire_topic = LaunchConfiguration('fire_topic')
     teleop_status = LaunchConfiguration('teleop_status_topic')
+    world_size = LaunchConfiguration('world_size')
+    terrain_image = LaunchConfiguration('terrain_image')
 
 
     pkg_share = get_package_share_directory('41068_ignition_bringup')
@@ -28,11 +32,15 @@ def generate_launch_description():
         DeclareLaunchArgument('joy_dev', default_value='/dev/input/js0'),
 
         # Default topics (override per your system)
-        DeclareLaunchArgument('drone_rgb_topic', default_value='/drone/camera/image'),
-        DeclareLaunchArgument('drone_depth_topic', default_value='/drone/camera/depth/image'),
         DeclareLaunchArgument('husky_rgb_topic', default_value='/husky/camera/image'),
-        DeclareLaunchArgument('husky_depth_topic', default_value='/husky/camera/depth/image'),
+        DeclareLaunchArgument('drone_ir_topic', default_value='/drone/ir_camera/image_raw'),
+        DeclareLaunchArgument('husky_map_topic', default_value='/husky/map'),
+        DeclareLaunchArgument('husky_odom_topic', default_value='/husky/odometry'),
+        DeclareLaunchArgument('drone_odom_topic', default_value='/drone/odometry'),
+        DeclareLaunchArgument('fire_topic', default_value='/drone/fire_scan/fire_positions'),
         DeclareLaunchArgument('teleop_status_topic', default_value='/teleop_status'),
+        DeclareLaunchArgument('world_size', default_value='50.0'),
+        DeclareLaunchArgument('terrain_image', default_value='bushland_terrain.png'),
 
         # Joystick driver
         Node(
@@ -90,11 +98,15 @@ def generate_launch_description():
             cmd=[
                 'python3', gui_script,
                 '--ros-args',
-                '-p', ['drone_rgb_topic:=', drone_rgb],
-                '-p', ['drone_depth_topic:=', drone_depth],
                 '-p', ['husky_rgb_topic:=', husky_rgb],
-                '-p', ['husky_depth_topic:=', husky_depth],
+                '-p', ['drone_ir_topic:=', drone_ir],
+                '-p', ['husky_map_topic:=', husky_map],
+                '-p', ['husky_odom_topic:=', husky_odom],
+                '-p', ['drone_odom_topic:=', drone_odom],
+                '-p', ['fire_topic:=', fire_topic],
                 '-p', ['teleop_status_topic:=', teleop_status],
+                '-p', ['world_size:=', world_size],
+                '-p', ['terrain_image:=', terrain_image],
             ],
             output='screen'
         ),

@@ -3,29 +3,42 @@
 """
 Steam Deck ROS2 GUI
 
-- Optimized layout for 1280x800 (Steam Deck) with four video panes:
-  - Drone RGB, Drone Depth, Husky RGB, Husky Depth
-- Subscribes to teleop status from the combined joystick teleop node
-- All topics are ROS2 parameters for easy override via launch file
+Optimized layout for 1280x800 (Steam Deck) with four panes:
+  - SLAM Map (Husky)
+  - Husky RGB Camera
+  - Drone IR Camera
+  - 2D Terrain Map (robot positions, fires, paths)
+
+Subscribes to teleop status from the combined joystick teleop node.
+All topics are ROS2 parameters for easy override via launch file.
 
 Controls are provided by the existing combined_joy_teleop node (launched separately).
 """
 
 import os
+import math
 import threading
 import queue
 import tkinter as tk
 from tkinter import ttk
 from typing import Optional
+import numpy as np
 
 import rclpy
 from rclpy.node import Node
-from rclpy.qos import qos_profile_sensor_data
+from rclpy.qos import qos_profile_sensor_data, QoSProfile, QoSReliabilityPolicy, QoSHistoryPolicy
 from sensor_msgs.msg import Image as ROSImage
+from nav_msgs.msg import OccupancyGrid, Odometry
+from geometry_msgs.msg import PoseArray
 from std_msgs.msg import String as ROSString
 from cv_bridge import CvBridge
 import cv2
 from PIL import Image, ImageTk
+
+import matplotlib
+matplotlib.use("TkAgg")
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
 
 class SteamDeckGui(Node):
@@ -34,22 +47,27 @@ class SteamDeckGui(Node):
         self.root = root
 
         # Parameters (defaults can be overridden via launch)
-        # Drone
-        self.declare_parameter('drone_rgb_topic', '/drone/camera/image')
-        self.declare_parameter('drone_depth_topic', '/drone/camera/depth/image')
-        # Husky
         self.declare_parameter('husky_rgb_topic', '/husky/camera/image')
-        self.declare_parameter('husky_depth_topic', '/husky/camera/depth/image')
-        # Teleop status topic (from combined_joy_teleop)
+        self.declare_parameter('drone_ir_topic', '/drone/ir_camera/image_raw')
+        self.declare_parameter('husky_map_topic', '/husky/map')
+        self.declare_parameter('husky_odom_topic', '/husky/odometry')
+        self.declare_parameter('drone_odom_topic', '/drone/odometry')
+        self.declare_parameter('fire_topic', '/drone/fire_scan/fire_positions')
         self.declare_parameter('teleop_status_topic', '/teleop_status')
+        self.declare_parameter('world_size', 50.0)
+        self.declare_parameter('terrain_image', 'bushland_terrain.png')
 
         self.topics = {
-            'drone_rgb': self.get_parameter('drone_rgb_topic').get_parameter_value().string_value,
-            'drone_depth': self.get_parameter('drone_depth_topic').get_parameter_value().string_value,
             'husky_rgb': self.get_parameter('husky_rgb_topic').get_parameter_value().string_value,
-            'husky_depth': self.get_parameter('husky_depth_topic').get_parameter_value().string_value,
+            'drone_ir': self.get_parameter('drone_ir_topic').get_parameter_value().string_value,
+            'husky_map': self.get_parameter('husky_map_topic').get_parameter_value().string_value,
+            'husky_odom': self.get_parameter('husky_odom_topic').get_parameter_value().string_value,
+            'drone_odom': self.get_parameter('drone_odom_topic').get_parameter_value().string_value,
+            'fires': self.get_parameter('fire_topic').get_parameter_value().string_value,
             'teleop_status': self.get_parameter('teleop_status_topic').get_parameter_value().string_value,
         }
+        self.world_size = self.get_parameter('world_size').get_parameter_value().double_value
+        self.terrain_image_path = self.get_parameter('terrain_image').get_parameter_value().string_value
 
         # CV conversion
         self.bridge = CvBridge()
@@ -62,22 +80,60 @@ class SteamDeckGui(Node):
             pass
 
         # Queues for incoming frames
-        self.queues = {k: queue.Queue(maxsize=1) for k in ['drone_rgb', 'drone_depth', 'husky_rgb', 'husky_depth']}
+        self.queues = {k: queue.Queue(maxsize=1) for k in ['husky_rgb', 'drone_ir', 'slam_map']}
         self._throttle_n = 2
-        self._counters = {k: 0 for k in self.queues.keys()}
+        self._counters = {k: 0 for k in ['husky_rgb', 'drone_ir', 'slam_map']}
+
+        # Position and path data
+        self.positions = {'husky': None, 'drone': None}
+        self.paths = {'husky': [], 'drone': []}
+        self.fire_positions = []
+        
+        # Load terrain image
+        self.terrain_img = None
+        if self.terrain_image_path:
+            try:
+                p = os.path.expanduser(self.terrain_image_path)
+                if not os.path.isabs(p):
+                    # Try relative to workspace
+                    p = os.path.join(os.path.dirname(__file__), '..', '..', '..', '..', self.terrain_image_path)
+                img = Image.open(p).convert('RGBA')
+                self.terrain_img = np.asarray(img)
+                self.get_logger().info(f"Loaded terrain image: {p}")
+            except Exception as e:
+                self.get_logger().warn(f"Failed to load terrain image: {e}")
 
         # Build UI
         self._build_ui()
 
         # Subscriptions
-        self.create_subscription(ROSImage, self.topics['drone_rgb'], lambda m: self._on_image(m, 'drone_rgb'), qos_profile_sensor_data)
-        self.create_subscription(ROSImage, self.topics['drone_depth'], lambda m: self._on_image(m, 'drone_depth'), qos_profile_sensor_data)
-        self.create_subscription(ROSImage, self.topics['husky_rgb'], lambda m: self._on_image(m, 'husky_rgb'), qos_profile_sensor_data)
-        self.create_subscription(ROSImage, self.topics['husky_depth'], lambda m: self._on_image(m, 'husky_depth'), qos_profile_sensor_data)
+        self.create_subscription(ROSImage, self.topics['husky_rgb'], 
+                                lambda m: self._on_image(m, 'husky_rgb'), qos_profile_sensor_data)
+        self.create_subscription(ROSImage, self.topics['drone_ir'], 
+                                lambda m: self._on_image(m, 'drone_ir'), qos_profile_sensor_data)
+        
+        # SLAM map subscription with appropriate QoS
+        map_qos = QoSProfile(
+            reliability=QoSReliabilityPolicy.RELIABLE,
+            history=QoSHistoryPolicy.KEEP_LAST,
+            depth=1
+        )
+        self.create_subscription(OccupancyGrid, self.topics['husky_map'], 
+                                self._on_slam_map, map_qos)
+        
+        # Odometry subscriptions
+        self.create_subscription(Odometry, self.topics['husky_odom'], self._on_husky_odom, 10)
+        self.create_subscription(Odometry, self.topics['drone_odom'], self._on_drone_odom, 10)
+        
+        # Fire positions
+        self.create_subscription(PoseArray, self.topics['fires'], self._on_fires, 10)
+        
+        # Teleop status
         self.create_subscription(ROSString, self.topics['teleop_status'], self._on_status, 10)
 
         # Periodic refresh
         self._schedule_refresh()
+        self._schedule_map_refresh()
 
         self.get_logger().info(f"SteamDeck GUI started with topics: {self.topics}")
 
@@ -92,7 +148,6 @@ class SteamDeckGui(Node):
         BG = '#0f172a'      # dark slate
         PANEL = '#1f2937'   # gray-800
         TEXT = '#e5e7eb'    # gray-200
-        ACCENT = '#2563eb'  # blue-600
 
         self.root.configure(bg=BG)
         style = ttk.Style()
@@ -108,10 +163,11 @@ class SteamDeckGui(Node):
         # Top bar
         top = ttk.Frame(self.root, padding=8, style='Dark.TFrame')
         top.pack(fill=tk.X)
-        self.status_label = ttk.Label(top, text='Teleop: —', style='Dark.TLabel', font=('Segoe UI', 12, 'bold'))
+        self.status_label = ttk.Label(top, text='Teleop: —', style='Dark.TLabel', 
+                                      font=('Segoe UI', 12, 'bold'))
         self.status_label.pack(side=tk.LEFT)
 
-        # 2x2 grid of video panes
+        # 2x2 grid layout
         grid = ttk.Frame(self.root, padding=8, style='Dark.TFrame')
         grid.pack(fill=tk.BOTH, expand=True)
         for c in range(2):
@@ -119,21 +175,48 @@ class SteamDeckGui(Node):
         for r in range(2):
             grid.rowconfigure(r, weight=1)
 
-        def make_panel(parent, title: str):
+        # Helper function to create panels
+        def make_panel(parent, title: str, use_canvas=False):
             panel = ttk.Frame(parent, padding=8, style='Panel.TFrame')
-            header = ttk.Label(panel, text=title, style='Panel.TLabel', font=('Segoe UI', 11, 'bold'))
+            header = ttk.Label(panel, text=title, style='Panel.TLabel', 
+                              font=('Segoe UI', 11, 'bold'))
             header.pack(anchor='w')
-            label = tk.Label(panel, bg='black', fg='white', text='Waiting for frames...')
-            label.pack(fill=tk.BOTH, expand=True, pady=(6, 0))
-            return panel, label
+            
+            if use_canvas:
+                return panel, None
+            else:
+                label = tk.Label(panel, bg='black', fg='white', text='Waiting...')
+                label.pack(fill=tk.BOTH, expand=True, pady=(6, 0))
+                return panel, label
 
-        p00, self.lbl_drone_rgb = make_panel(grid, 'Drone RGB')
-        p01, self.lbl_drone_depth = make_panel(grid, 'Drone Depth')
-        p10, self.lbl_husky_rgb = make_panel(grid, 'Husky RGB')
-        p11, self.lbl_husky_depth = make_panel(grid, 'Husky Depth')
+        # Top-left: SLAM Map
+        p00, _ = make_panel(grid, 'SLAM Map (Husky)', use_canvas=True)
+        self.lbl_slam_map = tk.Label(p00, bg='black', fg='white', text='Waiting for map...')
+        self.lbl_slam_map.pack(fill=tk.BOTH, expand=True, pady=(6, 0))
         p00.grid(row=0, column=0, sticky='nsew', padx=(0, 6), pady=(0, 6))
+
+        # Top-right: Husky RGB
+        p01, self.lbl_husky_rgb = make_panel(grid, 'Husky RGB')
         p01.grid(row=0, column=1, sticky='nsew', padx=(6, 0), pady=(0, 6))
+
+        # Bottom-left: Drone IR
+        p10, self.lbl_drone_ir = make_panel(grid, 'Drone IR')
         p10.grid(row=1, column=0, sticky='nsew', padx=(0, 6), pady=(6, 0))
+
+        # Bottom-right: 2D Terrain Map
+        p11, _ = make_panel(grid, '2D Map (Terrain)', use_canvas=True)
+        self.fig, self.ax = plt.subplots(figsize=(5, 4))
+        self.fig.patch.set_facecolor(PANEL)
+        self.ax.set_facecolor('#2a2a2a')
+        self.ax.set_xlim(-self.world_size/2, self.world_size/2)
+        self.ax.set_ylim(-self.world_size/2, self.world_size/2)
+        self.ax.set_aspect('equal', 'box')
+        self.ax.grid(True, color='#555555', alpha=0.3)
+        self.ax.tick_params(colors=TEXT, labelsize=8)
+        for spine in self.ax.spines.values():
+            spine.set_color(TEXT)
+        self.canvas = FigureCanvasTkAgg(self.fig, master=p11)
+        self.canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True, pady=(6, 0))
         p11.grid(row=1, column=1, sticky='nsew', padx=(6, 0), pady=(6, 0))
 
     def _on_status(self, msg: ROSString) -> None:
@@ -148,21 +231,9 @@ class SteamDeckGui(Node):
             self._counters[key] += 1
             if (self._counters[key] % self._throttle_n) != 0:
                 return
-            # Depth often comes as 16UC1 or 32FC1. Try sensible conversions.
-            encoding = msg.encoding.lower()
-            if 'depth' in key and encoding in ('16uc1', 'mono16'):
-                cv_img = self.bridge.imgmsg_to_cv2(msg, desired_encoding='passthrough')
-                # Normalize for display
-                disp = cv2.convertScaleAbs(cv_img, alpha=0.03)
-                disp = cv2.applyColorMap(disp, cv2.COLORMAP_TURBO)
-            elif 'depth' in key and encoding in ('32fc1',):
-                cv_img = self.bridge.imgmsg_to_cv2(msg, desired_encoding='passthrough')
-                clipped = cv2.threshold(cv_img, 10.0, 10.0, cv2.THRESH_TRUNC)[1]
-                norm = cv2.normalize(clipped, None, 0, 255, cv2.NORM_MINMAX)
-                disp = cv2.applyColorMap(norm.astype('uint8'), cv2.COLORMAP_TURBO)
-            else:
-                disp = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
-
+            
+            disp = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
+            
             try:
                 self.queues[key].get_nowait()
             except queue.Empty:
@@ -171,16 +242,66 @@ class SteamDeckGui(Node):
         except Exception as exc:
             self.get_logger().warn(f'Image conversion failed for {key}: {exc}')
 
+    def _on_slam_map(self, msg: OccupancyGrid) -> None:
+        try:
+            self._counters['slam_map'] += 1
+            if (self._counters['slam_map'] % self._throttle_n) != 0:
+                return
+            
+            # Convert occupancy grid to image
+            width = msg.info.width
+            height = msg.info.height
+            data = np.array(msg.data, dtype=np.int8).reshape((height, width))
+            
+            # Convert to grayscale image (0=free, 100=occupied, -1=unknown)
+            img = np.zeros((height, width, 3), dtype=np.uint8)
+            img[data == -1] = [50, 50, 50]      # unknown = gray
+            img[data == 0] = [255, 255, 255]    # free = white
+            img[data > 50] = [0, 0, 0]          # occupied = black
+            
+            # Flip vertically for display
+            img = cv2.flip(img, 0)
+            
+            try:
+                self.queues['slam_map'].get_nowait()
+            except queue.Empty:
+                pass
+            self.queues['slam_map'].put_nowait(img)
+        except Exception as exc:
+            self.get_logger().warn(f'SLAM map conversion failed: {exc}')
+
+    def _on_husky_odom(self, msg: Odometry) -> None:
+        x = msg.pose.pose.position.x
+        y = msg.pose.pose.position.y
+        self.positions['husky'] = (x, y)
+        self.paths['husky'].append((x, y))
+        if len(self.paths['husky']) > 2000:
+            self.paths['husky'].pop(0)
+
+    def _on_drone_odom(self, msg: Odometry) -> None:
+        x = msg.pose.pose.position.x
+        y = msg.pose.pose.position.y
+        self.positions['drone'] = (x, y)
+        self.paths['drone'].append((x, y))
+        if len(self.paths['drone']) > 2000:
+            self.paths['drone'].pop(0)
+
+    def _on_fires(self, msg: PoseArray) -> None:
+        fires = []
+        for p in msg.poses:
+            fires.append((p.position.x, p.position.y))
+        self.fire_positions = fires
+
     def _schedule_refresh(self) -> None:
         self.root.after(100, self._refresh)
 
     def _refresh(self) -> None:
         try:
+            # Update camera feeds
             mapping = [
-                ('drone_rgb', self.lbl_drone_rgb),
-                ('drone_depth', self.lbl_drone_depth),
                 ('husky_rgb', self.lbl_husky_rgb),
-                ('husky_depth', self.lbl_husky_depth),
+                ('drone_ir', self.lbl_drone_ir),
+                ('slam_map', self.lbl_slam_map),
             ]
             for key, label in mapping:
                 frame = None
@@ -193,6 +314,61 @@ class SteamDeckGui(Node):
                 self._update_label_with_frame(label, frame)
         finally:
             self._schedule_refresh()
+
+    def _schedule_map_refresh(self) -> None:
+        self.root.after(500, self._refresh_2d_map)
+
+    def _refresh_2d_map(self) -> None:
+        try:
+            self.ax.clear()
+            self.ax.set_xlim(-self.world_size/2, self.world_size/2)
+            self.ax.set_ylim(-self.world_size/2, self.world_size/2)
+            self.ax.set_aspect('equal', 'box')
+            self.ax.grid(True, color='#555555', alpha=0.3)
+            
+            # Draw terrain image if available
+            if self.terrain_img is not None:
+                extent = (-self.world_size/2, self.world_size/2, 
+                         -self.world_size/2, self.world_size/2)
+                self.ax.imshow(self.terrain_img, extent=extent, origin='lower', 
+                              zorder=0, interpolation='bilinear', alpha=0.6)
+            
+            # Draw paths
+            if self.paths['husky']:
+                xs, ys = zip(*self.paths['husky'])
+                self.ax.plot(xs, ys, '-', color='cyan', linewidth=2, alpha=0.7, label='Husky')
+            if self.paths['drone']:
+                xs, ys = zip(*self.paths['drone'])
+                self.ax.plot(xs, ys, '-', color='lime', linewidth=2, alpha=0.7, label='Drone')
+            
+            # Draw robot positions
+            if self.positions['husky']:
+                x, y = self.positions['husky']
+                self.ax.plot(x, y, 'cs', markersize=12, markeredgecolor='white', markeredgewidth=2)
+            if self.positions['drone']:
+                x, y = self.positions['drone']
+                self.ax.plot(x, y, 'g^', markersize=12, markeredgecolor='white', markeredgewidth=2)
+            
+            # Draw fires
+            if self.fire_positions:
+                fx, fy = zip(*self.fire_positions)
+                self.ax.scatter(fx, fy, c='red', s=100, marker='*', 
+                               edgecolors='yellow', linewidths=2, zorder=10)
+            
+            # Style
+            TEXT = '#e5e7eb'
+            self.ax.tick_params(colors=TEXT, labelsize=8)
+            for spine in self.ax.spines.values():
+                spine.set_color(TEXT)
+            if len(self.paths['husky']) > 0 or len(self.paths['drone']) > 0:
+                self.ax.legend(loc='upper right', fontsize=8, 
+                              facecolor='#1f2937', edgecolor=TEXT, labelcolor=TEXT)
+            
+            self.canvas.draw_idle()
+        except Exception as e:
+            self.get_logger().warn(f'2D map refresh error: {e}')
+        finally:
+            self._schedule_map_refresh()
 
     def _update_label_with_frame(self, label: tk.Label, frame_bgr) -> None:
         # Resize with aspect ratio to fill area
@@ -233,5 +409,3 @@ def main() -> None:
 
 if __name__ == '__main__':
     main()
-
-
