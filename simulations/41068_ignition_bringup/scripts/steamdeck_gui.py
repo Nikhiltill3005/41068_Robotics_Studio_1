@@ -252,8 +252,8 @@ class SteamDeckGui(Node):
         try:
             text = msg.data if isinstance(msg.data, str) else str(msg.data)
             self.status_label.configure(text=f'Teleop: {text}')
-    except Exception:
-        pass
+        except Exception:
+            pass
 
     def _on_joy(self, msg: Joy) -> None:
         """Handle joystick input for camera switching.
