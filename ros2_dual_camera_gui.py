@@ -1,46 +1,75 @@
 #!/usr/bin/env python3
+
 """
-ROS2 Dual Camera GUI (Tkinter)
-- Displays drone and ground vehicle camera feeds
-- Subscribes to ROS2 topics and updates GUI thread-safely
-- Minimal structure ready for adding controls
+Steam Deck ROS2 GUI
+
+Optimized layout for 1280x800 (Steam Deck) with three panes:
+  - Switchable RGB Camera (Husky/Drone - toggle via touchscreen button) - LEFT 50% (MAIN FOCUS)
+  - SLAM Map (Husky) - top right
+  - 2D Terrain Map (robot positions, fires, paths) - bottom right
+
+Features a prominent fire detection status panel in the top bar.
+All topics are ROS2 parameters for easy override via launch file.
 """
 
+import os
+import math
+import threading
+import queue
 import tkinter as tk
 from tkinter import ttk
-import threading
-import time
 from typing import Optional
-import queue
-import os
+import numpy as np
 
 import rclpy
 from rclpy.node import Node
-from rclpy.qos import qos_profile_sensor_data
-from sensor_msgs.msg import Image as ROSImage
+from rclpy.qos import qos_profile_sensor_data, QoSProfile, QoSReliabilityPolicy, QoSHistoryPolicy, QoSDurabilityPolicy
+from sensor_msgs.msg import Image as ROSImage, Joy, CompressedImage
+from nav_msgs.msg import OccupancyGrid, Odometry
+from geometry_msgs.msg import PoseArray
+from std_msgs.msg import String as ROSString
 from cv_bridge import CvBridge
 import cv2
 from PIL import Image, ImageTk
 
-
-# ================== TOPIC CONFIG (EDIT HERE) ==================
-# Set your ROS2 image topics here. The GUI can toggle the drone topic
-# between IR and RGB by pressing a button in the Drone panel header.
-DRONE_TOPIC_IR: str  = '/drone/ir_camera/image_raw'   # <- set your IR topic
-DRONE_TOPIC_RGB: str = '/drone/fire_scan/debug_image'  # <- set your RGB topic
-GROUND_TOPIC: str    = '/husky/camera/image'          # <- set your ground topic
-# ==============================================================
+import matplotlib
+matplotlib.use("TkAgg")
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
 
-class Ros2DualCameraGui(Node):
+class SteamDeckGui(Node):
     def __init__(self, root: tk.Tk):
-        super().__init__('ros2_dual_camera_gui')
+        super().__init__('steamdeck_gui')
         self.root = root
-        self.root.title('Forest Fire Detection - Local GUI')
-        self.root.geometry('1200x900')
-        self.bridge = CvBridge()
 
-        # Reduce native thread contention (helps avoid segfaults under load)
+        # Parameters (defaults can be overridden via launch)
+        self.declare_parameter('husky_rgb_topic', '/husky/camera/image')
+        self.declare_parameter('drone_rgb_topic', '/drone/camera/image')
+        self.declare_parameter('husky_map_topic', '/husky/map')
+        self.declare_parameter('husky_odom_topic', '/husky/odometry')
+        self.declare_parameter('drone_odom_topic', '/drone/odometry')
+        self.declare_parameter('fire_topic', '/drone/fire_scan/fire_positions')
+        self.declare_parameter('teleop_status_topic', '/teleop_status')
+        self.declare_parameter('joy_topic', '/joy')
+        self.declare_parameter('world_size', 50.0)
+        self.declare_parameter('terrain_image', 'bushland_terrain.png')
+
+        self.topics = {
+            'husky_rgb': self.get_parameter('husky_rgb_topic').get_parameter_value().string_value,
+            'drone_rgb': self.get_parameter('drone_rgb_topic').get_parameter_value().string_value,
+            'husky_map': self.get_parameter('husky_map_topic').get_parameter_value().string_value,
+            'husky_odom': self.get_parameter('husky_odom_topic').get_parameter_value().string_value,
+            'drone_odom': self.get_parameter('drone_odom_topic').get_parameter_value().string_value,
+            'fires': self.get_parameter('fire_topic').get_parameter_value().string_value,
+            'teleop_status': self.get_parameter('teleop_status_topic').get_parameter_value().string_value,
+            'joy': self.get_parameter('joy_topic').get_parameter_value().string_value,
+        }
+        self.world_size = self.get_parameter('world_size').get_parameter_value().double_value
+        self.terrain_image_path = self.get_parameter('terrain_image').get_parameter_value().string_value
+
+        # CV conversion
+        self.bridge = CvBridge()
         try:
             os.environ.setdefault('OMP_NUM_THREADS', '1')
             os.environ.setdefault('OPENBLAS_NUM_THREADS', '1')
@@ -49,42 +78,95 @@ class Ros2DualCameraGui(Node):
         except Exception:
             pass
 
-        # Latest frames (BGR OpenCV images)
-        self._drone_frame = None
-        self._ground_frame = None
-        self._lock = threading.Lock()
+        # Queues for incoming frames
+        self.queues = {k: queue.Queue(maxsize=1) for k in ['husky_rgb', 'drone_rgb', 'slam_map']}
+        self._throttle_n = 5  # Skip more frames to reduce lag
+        self._counters = {k: 0 for k in ['husky_rgb', 'drone_rgb', 'slam_map']}
 
-        # Bounded queues to decouple ROS callbacks from GUI thread
-        self._drone_q: queue.Queue = queue.Queue(maxsize=1)
-        self._ground_q: queue.Queue = queue.Queue(maxsize=1)
+        # Camera switching state (toggled via touchscreen button)
+        self.active_rgb_camera = 'husky'  # 'husky' or 'drone'
 
-        # Lightweight throttling (process every Nth frame)
-        self._drone_ctr = 0
-        self._ground_ctr = 0
-        self._throttle_n = 2  # increase to drop more frames if needed
+        # Position and path data
+        self.positions = {'husky': None, 'drone': None}
+        self.paths = {'husky': [], 'drone': []}
+        self.fire_positions = []
+        self.total_fires_detected = 0  # Track total unique fires detected
+        self.detected_fire_ids = set()  # Track unique fire locations to avoid double counting
+        
+        # Load terrain image
+        self.terrain_img = None
+        if self.terrain_image_path:
+            try:
+                p = os.path.expanduser(self.terrain_image_path)
+                if not os.path.isabs(p):
+                    # Try relative to workspace
+                    p = os.path.join(os.path.dirname(__file__), '..', '..', '..', '..', self.terrain_image_path)
+                img = Image.open(p).convert('RGBA')
+                self.terrain_img = np.asarray(img)
+                self.get_logger().info(f"Loaded terrain image: {p}")
+            except Exception as e:
+                self.get_logger().warn(f"Failed to load terrain image: {e}")
 
         # Build UI
-        self._build_layout()
+        self._build_ui()
 
-        # Track which drone topic is active
-        self.current_drone_topic: str = DRONE_TOPIC_IR
+        # Optimized QoS for low-latency image transport
+        image_qos = QoSProfile(
+            reliability=QoSReliabilityPolicy.BEST_EFFORT,
+            durability=QoSDurabilityPolicy.VOLATILE,
+            history=QoSHistoryPolicy.KEEP_LAST,
+            depth=1  # Only keep latest message
+        )
 
-        # ROS2 subscriptions (use sensor data QoS to avoid backpressure issues)
-        self.drone_sub = self.create_subscription(ROSImage, self.current_drone_topic, self._on_drone_image, qos_profile_sensor_data)
-        self.ground_sub = self.create_subscription(ROSImage, GROUND_TOPIC, self._on_ground_image, qos_profile_sensor_data)
+        # Subscribe to COMPRESSED image topics for much better network performance
+        self.create_subscription(CompressedImage, self.topics['husky_rgb'] + '/compressed', 
+                                lambda m: self._on_compressed_image(m, 'husky_rgb'), image_qos)
+        self.create_subscription(CompressedImage, self.topics['drone_rgb'] + '/compressed', 
+                                lambda m: self._on_compressed_image(m, 'drone_rgb'), image_qos)
+        
+        # Joystick subscription for camera switching
+        self.create_subscription(Joy, self.topics['joy'], self._on_joy, 10)
+        
+        self.get_logger().info("Subscribed to COMPRESSED image topics for low-latency streaming")
+        
+        # SLAM map subscription with appropriate QoS
+        map_qos = QoSProfile(
+            reliability=QoSReliabilityPolicy.RELIABLE,
+            history=QoSHistoryPolicy.KEEP_LAST,
+            depth=1
+        )
+        self.create_subscription(OccupancyGrid, self.topics['husky_map'], 
+                                self._on_slam_map, map_qos)
+        
+        # Odometry subscriptions
+        self.create_subscription(Odometry, self.topics['husky_odom'], self._on_husky_odom, 10)
+        self.create_subscription(Odometry, self.topics['drone_odom'], self._on_drone_odom, 10)
+        
+        # Fire positions
+        self.create_subscription(PoseArray, self.topics['fires'], self._on_fires, 10)
+        
+        # Teleop status
+        self.create_subscription(ROSString, self.topics['teleop_status'], self._on_status, 10)
 
-        # Start periodic GUI refresh timer
-        self._schedule_gui_refresh()
+        # Periodic refresh
+        self._schedule_refresh()
+        self._schedule_map_refresh()
 
-    # ---------------- UI -----------------
-    def _build_layout(self) -> None:
-        # Colors to emulate index.html theme
-        BG = '#111827'            # gray-900
-        PANEL_BG = '#2d3748'      # smoke-gray
-        TEXT = '#e5e7eb'          # gray-200
-        DRONE = '#3b82f6'         # drone-blue
-        GROUND = '#10b981'        # ground-green
-        FIRE = '#ff4444'          # fire-red
+        self.get_logger().info(f"SteamDeck GUI started with topics: {self.topics}")
+
+    def _build_ui(self) -> None:
+        # Window setup for Steam Deck
+        self.root.title('Forest Fire Detection - Steam Deck')
+        try:
+            self.root.geometry('1280x800')
+        except Exception:
+            pass
+
+        BG = '#111827'      # gray-900 (darker)
+        PANEL = '#2d3748'   # smoke-gray
+        TEXT = '#e5e7eb'    # gray-200
+        FIRE_RED = '#ff4444'
+        FIRE_ORANGE = '#ff8800'
 
         self.root.configure(bg=BG)
         style = ttk.Style()
@@ -93,188 +175,448 @@ class Ros2DualCameraGui(Node):
         except Exception:
             pass
         style.configure('Dark.TFrame', background=BG)
-        style.configure('Panel.TFrame', background=PANEL_BG)
+        style.configure('Panel.TFrame', background=PANEL)
         style.configure('Dark.TLabel', background=BG, foreground=TEXT)
-        style.configure('Panel.TLabel', background=PANEL_BG, foreground=TEXT)
-        style.configure('Accent.TButton', foreground=TEXT)
-        style.map('Accent.TButton', background=[('active', '#374151')])
+        style.configure('Panel.TLabel', background=PANEL, foreground=TEXT)
 
-        container = ttk.Frame(self.root, padding=12, style='Dark.TFrame')
-        container.pack(fill=tk.BOTH, expand=True)
+        # Top bar with teleop status and fire detection panel
+        top = ttk.Frame(self.root, padding=8, style='Dark.TFrame')
+        top.pack(fill=tk.X)
+        
+        # Teleop status button (left side)
+        self.teleop_active = False
+        self.teleop_button = tk.Button(
+            top, 
+            text='Teleop Inactive', 
+            bg='#555555',
+            fg='white',
+            font=('Segoe UI', 11, 'bold'),
+            relief='flat',
+            padx=12,
+            pady=4,
+            state='disabled'
+        )
+        self.teleop_button.pack(side=tk.LEFT)
 
-        # Title
-        title = ttk.Label(container, text='Forest Fire Detection System', style='Dark.TLabel',
-                          font=('Segoe UI', 18, 'bold'))
-        title.pack(anchor=tk.W, pady=(0, 12))
+        # FIRE DETECTION STATUS PANEL - Prominent dedicated section (right side)
+        fire_panel = tk.Frame(top, bg=PANEL, relief='solid', borderwidth=3, highlightbackground='#666', highlightthickness=1)
+        fire_panel.pack(side=tk.RIGHT, padx=(10, 0))
+        
+        # Fire icon and status
+        fire_header = tk.Frame(fire_panel, bg=PANEL)
+        fire_header.pack(fill=tk.X, padx=10, pady=(8, 2))
+        
+        fire_icon = tk.Label(
+            fire_header,
+            text='🔥',
+            bg=PANEL,
+            font=('Segoe UI', 24),
+        )
+        fire_icon.pack(side=tk.LEFT, padx=(0, 8))
+        
+        fire_text_container = tk.Frame(fire_header, bg=PANEL)
+        fire_text_container.pack(side=tk.LEFT)
+        
+        tk.Label(
+            fire_text_container,
+            text='FIRE DETECTION STATUS',
+            bg=PANEL,
+            fg=TEXT,
+            font=('Segoe UI', 9, 'bold')
+        ).pack(anchor='w')
+        
+        # Large status text that changes based on detection
+        self.fire_status_label = tk.Label(
+            fire_text_container,
+            text='NO FIRES DETECTED',
+            bg=PANEL,
+            fg='#10b981',  # Green when no fire
+            font=('Segoe UI', 14, 'bold')
+        )
+        self.fire_status_label.pack(anchor='w')
+        
+        # Fire counter section
+        fire_count_frame = tk.Frame(fire_panel, bg=PANEL)
+        fire_count_frame.pack(fill=tk.X, padx=10, pady=(2, 8))
+        
+        tk.Label(
+            fire_count_frame,
+            text='Total Detected:',
+            bg=PANEL,
+            fg='#9ca3af',
+            font=('Segoe UI', 9)
+        ).pack(side=tk.LEFT, padx=(0, 6))
+        
+        self.fire_count_label = tk.Label(
+            fire_count_frame,
+            text='0',
+            bg=PANEL,
+            fg=FIRE_ORANGE,
+            font=('Segoe UI', 16, 'bold')
+        )
+        self.fire_count_label.pack(side=tk.LEFT)
 
-        # Notebook with two tabs: Cameras (stacked vertically) and Map (empty placeholder)
-        notebook = ttk.Notebook(container)
-        notebook.pack(fill=tk.BOTH, expand=True)
+        # Grid layout: Camera on left (50%), SLAM+2D Map stacked on right (50%)
+        grid = ttk.Frame(self.root, padding=8, style='Dark.TFrame')
+        grid.pack(fill=tk.BOTH, expand=True)
+        grid.columnconfigure(0, weight=1)  # Left column (camera)
+        grid.columnconfigure(1, weight=1)  # Right column (maps)
+        grid.rowconfigure(0, weight=1)  # Top row (camera / SLAM)
+        grid.rowconfigure(1, weight=1)  # Bottom row (2D Map)
 
-        cameras_tab = ttk.Frame(notebook, style='Dark.TFrame')
-        map_tab = ttk.Frame(notebook, style='Dark.TFrame')
-        notebook.add(cameras_tab, text='Cameras')
-        notebook.add(map_tab, text='Map (2D)')
+        # Helper function to create panels
+        def make_panel(parent, title: str, use_canvas=False):
+            panel = ttk.Frame(parent, padding=8, style='Panel.TFrame')
+            header = ttk.Label(panel, text=title, style='Panel.TLabel', 
+                              font=('Segoe UI', 11, 'bold'))
+            header.pack(anchor='w')
+            
+            if use_canvas:
+                return panel, None
+            else:
+                label = tk.Label(panel, bg='black', fg='white', text='Waiting...')
+                label.pack(fill=tk.BOTH, expand=True, pady=(6, 0))
+                return panel, label
 
-        # Stack panels vertically in Cameras tab
-        cameras_tab.columnconfigure(0, weight=1)
-        cameras_tab.rowconfigure(0, weight=1)
-        cameras_tab.rowconfigure(1, weight=1)
+        # Left: Switchable RGB Camera (spans both rows) - MAIN FOCUS
+        p_camera = ttk.Frame(grid, padding=8, style='Panel.TFrame')
+        
+        # Header with toggle button
+        header_frame = tk.Frame(p_camera, bg=PANEL)
+        header_frame.pack(fill=tk.X, anchor='w')
+        
+        self.rgb_camera_header = ttk.Label(header_frame, text='RGB Camera', 
+                                           style='Panel.TLabel', font=('Segoe UI', 11, 'bold'))
+        self.rgb_camera_header.pack(side=tk.LEFT)
+        
+        # Toggle button for switching cameras
+        self.camera_toggle_btn = tk.Button(
+            header_frame,
+            text='Viewing: HUSKY',
+            bg='#2563eb',  # Blue accent
+            fg='white',
+            font=('Segoe UI', 10, 'bold'),
+            relief='flat',
+            padx=12,
+            pady=4,
+            command=self._toggle_camera
+        )
+        self.camera_toggle_btn.pack(side=tk.RIGHT, padx=(10, 0))
+        
+        # Camera display area
+        self.lbl_switchable_rgb = tk.Label(p_camera, bg='black', fg='white', text='Waiting for camera...')
+        self.lbl_switchable_rgb.pack(fill=tk.BOTH, expand=True, pady=(6, 0))
+        
+        p_camera.grid(row=0, column=0, rowspan=2, sticky='nsew', padx=(0, 6))
 
-        # Drone panel (top)
-        drone_panel = ttk.Frame(cameras_tab, padding=10, style='Panel.TFrame')
-        drone_panel.grid(row=0, column=0, sticky='nsew', pady=(0, 8))
-        header = ttk.Frame(drone_panel, style='Panel.TFrame')
-        header.pack(fill=tk.X)
-        ttk.Label(header, text='🚁 Drone Camera', style='Panel.TLabel',
-                  font=('Segoe UI', 12, 'bold')).pack(side=tk.LEFT, anchor=tk.W)
-        ttk.Button(header, text='Swap Topic', style='Accent.TButton',
-                   command=self.toggle_drone_topic).pack(side=tk.RIGHT)
-        self.drone_topic_label = ttk.Label(header, text='IR', width=6, anchor='center', style='Panel.TLabel')
-        self.drone_topic_label.pack(side=tk.RIGHT, padx=(0, 8))
-        self.drone_label = tk.Label(drone_panel, bg='black', fg='white',
-                                    text='Waiting for drone frames...')
-        self.drone_label.pack(fill=tk.BOTH, expand=True, pady=(8, 0))
+        # Top-right: SLAM Map
+        p_slam, _ = make_panel(grid, 'SLAM Map (Husky)', use_canvas=True)
+        self.lbl_slam_map = tk.Label(p_slam, bg='black', fg='white', text='Waiting for map...')
+        self.lbl_slam_map.pack(fill=tk.BOTH, expand=True, pady=(6, 0))
+        p_slam.grid(row=0, column=1, sticky='nsew', padx=(6, 0), pady=(0, 6))
 
-        # Ground panel (bottom)
-        ground_panel = ttk.Frame(cameras_tab, padding=10, style='Panel.TFrame')
-        ground_panel.grid(row=1, column=0, sticky='nsew', pady=(8, 0))
-        ttk.Label(ground_panel, text='🚗 Ground Vehicle Camera', style='Panel.TLabel',
-                  font=('Segoe UI', 12, 'bold')).pack(anchor=tk.W)
-        self.ground_label = tk.Label(ground_panel, bg='black', fg='white',
-                                     text='Waiting for ground frames...')
-        self.ground_label.pack(fill=tk.BOTH, expand=True, pady=(8, 0))
+        # Bottom-right: 2D Terrain Map
+        p_terrain, _ = make_panel(grid, '2D Map (Terrain)', use_canvas=True)
+        self.fig, self.ax = plt.subplots(figsize=(5, 4))
+        self.fig.patch.set_facecolor(PANEL)
+        self.ax.set_facecolor('#2a2a2a')
+        self.ax.set_xlim(-self.world_size/2, self.world_size/2)
+        self.ax.set_ylim(-self.world_size/2, self.world_size/2)
+        self.ax.set_aspect('equal', 'box')
+        self.ax.grid(True, color='#555555', alpha=0.3)
+        self.ax.tick_params(colors=TEXT, labelsize=8)
+        for spine in self.ax.spines.values():
+            spine.set_color(TEXT)
+        self.canvas = FigureCanvasTkAgg(self.fig, master=p_terrain)
+        self.canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True, pady=(6, 0))
+        p_terrain.grid(row=1, column=1, sticky='nsew', padx=(6, 0), pady=(6, 0))
 
-        # Map tab placeholder content (2D world map for fire locations)
-        map_tab.columnconfigure(0, weight=1)
-        map_tab.rowconfigure(0, weight=1)
-        map_header = ttk.Frame(map_tab, padding=10, style='Panel.TFrame')
-        map_header.grid(row=0, column=0, sticky='new')
-        ttk.Label(map_header, text='🗺️ Fire Map (2D) - Placeholder', style='Panel.TLabel',
-                  font=('Segoe UI', 12, 'bold')).pack(anchor=tk.W)
-        # Empty canvas you can draw onto later
-        self.map_canvas = tk.Canvas(map_tab, bg='black', highlightthickness=0)
-        self.map_canvas.grid(row=1, column=0, sticky='nsew', padx=10, pady=(0, 10))
-        # Example frame border inside canvas region (visual placeholder)
-        self.map_canvas.create_rectangle(10, 10, 300, 200, outline=FIRE)
-        self.map_canvas.create_text(20, 20, anchor='nw', fill='white',
-                                    text='Add your 2D world rendering here...')
+    def _on_status(self, msg: ROSString) -> None:
+        """Status messages show which vehicle is active, not used for teleop button anymore."""
+        pass  # Teleop button now controlled by actual joy input
 
-    # ------------- ROS callbacks ---------
-    def _on_drone_image(self, msg: ROSImage) -> None:
+    def _toggle_camera(self) -> None:
+        """Toggle between Husky and Drone RGB cameras via touchscreen button."""
+        if self.active_rgb_camera == 'husky':
+            self.active_rgb_camera = 'drone'
+            self.camera_toggle_btn.configure(text='Viewing: DRONE', bg='#059669')  # Green for drone
+            self.get_logger().info('Switched RGB camera to DRONE')
+        else:
+            self.active_rgb_camera = 'husky'
+            self.camera_toggle_btn.configure(text='Viewing: HUSKY', bg='#2563eb')  # Blue for husky
+            self.get_logger().info('Switched RGB camera to HUSKY')
+
+    def _on_joy(self, msg: Joy) -> None:
+        """Handle joystick input - check if LB or RB (bumpers) are held for teleop status."""
         try:
-            self._drone_ctr += 1
-            if (self._drone_ctr % self._throttle_n) != 0:
+            # Button 4 = LB (Left Bumper), Button 5 = RB (Right Bumper)
+            lb_pressed = msg.buttons[4] == 1 if len(msg.buttons) > 4 else False
+            rb_pressed = msg.buttons[5] == 1 if len(msg.buttons) > 5 else False
+            
+            # Teleop is active when EITHER bumper is held down
+            is_active = lb_pressed or rb_pressed
+            
+            if is_active and not self.teleop_active:
+                # Switched to active
+                self.teleop_button.configure(
+                    text='Teleop Active',
+                    bg='#00cc00'  # Bright green when active
+                )
+                self.teleop_active = True
+            elif not is_active and self.teleop_active:
+                # Switched to inactive
+                self.teleop_button.configure(
+                    text='Teleop Inactive',
+                    bg='#555555'  # Gray when inactive
+                )
+                self.teleop_active = False
+        except Exception as e:
+            self.get_logger().warn(f'Joy callback error: {e}')
+
+    def _on_compressed_image(self, msg: CompressedImage, key: str) -> None:
+        """Handle compressed image - much faster over network!"""
+        try:
+            self._counters[key] += 1
+            if (self._counters[key] % self._throttle_n) != 0:
                 return
-            frame = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
-            # keep only the latest
-            try:
-                self._drone_q.get_nowait()
-            except queue.Empty:
-                pass
-            self._drone_q.put_nowait(frame)
-        except Exception as exc:
-            self.get_logger().warn(f'Drone image conversion failed: {exc}')
-
-    def _on_ground_image(self, msg: ROSImage) -> None:
-        try:
-            self._ground_ctr += 1
-            if (self._ground_ctr % self._throttle_n) != 0:
+            
+            # Decode compressed JPEG directly from bytes
+            np_arr = np.frombuffer(msg.data, np.uint8)
+            disp = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+            
+            if disp is None:
                 return
-            frame = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
-            # keep only the latest
+            
             try:
-                self._ground_q.get_nowait()
+                self.queues[key].get_nowait()
             except queue.Empty:
                 pass
-            self._ground_q.put_nowait(frame)
+            self.queues[key].put_nowait(disp)
         except Exception as exc:
-            self.get_logger().warn(f'Ground image conversion failed: {exc}')
+            self.get_logger().warn(f'Compressed image decode failed for {key}: {exc}')
 
-    # ------------- GUI refresh -----------
-    def _schedule_gui_refresh(self) -> None:
-        # Refresh every ~100ms
-        self.root.after(100, self._refresh_images)
-
-    def _refresh_images(self) -> None:
+    def _on_image(self, msg: ROSImage, key: str) -> None:
+        """Fallback for raw images (not used if compressed available)"""
         try:
-            # Pull latest frames from queues (non-blocking)
-            drone = None
-            ground = None
+            self._counters[key] += 1
+            if (self._counters[key] % self._throttle_n) != 0:
+                return
+            
+            disp = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
+            
             try:
-                drone = self._drone_q.get_nowait()
+                self.queues[key].get_nowait()
             except queue.Empty:
                 pass
-            try:
-                ground = self._ground_q.get_nowait()
-            except queue.Empty:
-                pass
+            self.queues[key].put_nowait(disp)
+        except Exception as exc:
+            self.get_logger().warn(f'Image conversion failed for {key}: {exc}')
 
-            if drone is not None:
-                self._update_label_with_frame(self.drone_label, drone)
-            if ground is not None:
-                self._update_label_with_frame(self.ground_label, ground)
+    def _on_slam_map(self, msg: OccupancyGrid) -> None:
+        try:
+            self._counters['slam_map'] += 1
+            if (self._counters['slam_map'] % self._throttle_n) != 0:
+                return
+            
+            # Convert occupancy grid to image
+            width = msg.info.width
+            height = msg.info.height
+            data = np.array(msg.data, dtype=np.int8).reshape((height, width))
+            
+            # Convert to grayscale image (0=free, 100=occupied, -1=unknown)
+            img = np.zeros((height, width, 3), dtype=np.uint8)
+            img[data == -1] = [50, 50, 50]      # unknown = gray
+            img[data == 0] = [255, 255, 255]    # free = white
+            img[data > 50] = [0, 0, 0]          # occupied = black
+            
+            # Flip vertically for display
+            img = cv2.flip(img, 0)
+            
+            try:
+                self.queues['slam_map'].get_nowait()
+            except queue.Empty:
+                pass
+            self.queues['slam_map'].put_nowait(img)
+        except Exception as exc:
+            self.get_logger().warn(f'SLAM map conversion failed: {exc}')
+
+    def _on_husky_odom(self, msg: Odometry) -> None:
+        x = msg.pose.pose.position.x
+        y = msg.pose.pose.position.y
+        self.positions['husky'] = (x, y)
+        self.paths['husky'].append((x, y))
+        if len(self.paths['husky']) > 2000:
+            self.paths['husky'].pop(0)
+
+    def _on_drone_odom(self, msg: Odometry) -> None:
+        x = msg.pose.pose.position.x
+        y = msg.pose.pose.position.y
+        self.positions['drone'] = (x, y)
+        self.paths['drone'].append((x, y))
+        if len(self.paths['drone']) > 2000:
+            self.paths['drone'].pop(0)
+
+    def _on_fires(self, msg: PoseArray) -> None:
+        """Update fire positions and count unique fires detected."""
+        fires = []
+        for p in msg.poses:
+            fire_pos = (p.position.x, p.position.y)
+            fires.append(fire_pos)
+            
+            # Create a unique ID for this fire location (rounded to 0.5m grid to avoid duplicates)
+            fire_id = (round(p.position.x * 2) / 2, round(p.position.y * 2) / 2)
+            
+            # If this is a new fire location, increment counter
+            if fire_id not in self.detected_fire_ids:
+                self.detected_fire_ids.add(fire_id)
+                self.total_fires_detected = len(self.detected_fire_ids)
+                self._update_fire_status()
+                self.get_logger().info(f'New fire detected at ({fire_pos[0]:.1f}, {fire_pos[1]:.1f}). Total: {self.total_fires_detected}')
+        
+        self.fire_positions = fires
+        
+        # Update status even if no new fires (to handle when fires go out of view)
+        if len(fires) == 0 and self.total_fires_detected == 0:
+            self._update_fire_status()
+
+    def _update_fire_status(self) -> None:
+        """Update the fire detection status panel in the GUI."""
+        def update():
+            if self.total_fires_detected > 0:
+                # FIRE DETECTED - Show alert status
+                self.fire_status_label.configure(
+                    text='⚠️ FIRE DETECTED ⚠️',
+                    fg='#ff4444'  # Bright red
+                )
+                self.fire_count_label.configure(text=str(self.total_fires_detected))
+            else:
+                # NO FIRE - Show safe status
+                self.fire_status_label.configure(
+                    text='NO FIRES DETECTED',
+                    fg='#10b981'  # Green
+                )
+                self.fire_count_label.configure(text='0')
+        
+        self.root.after(0, update)
+
+    def _schedule_refresh(self) -> None:
+        self.root.after(100, self._refresh)
+
+    def _refresh(self) -> None:
+        try:
+            # Update switchable RGB camera based on active selection
+            rgb_key = f'{self.active_rgb_camera}_rgb'
+            frame = None
+            try:
+                frame = self.queues[rgb_key].get_nowait()
+            except queue.Empty:
+                pass
+            if frame is not None:
+                self._update_label_with_frame(self.lbl_switchable_rgb, frame)
+            
+            # Update SLAM map
+            mapping = [
+                ('slam_map', self.lbl_slam_map),
+            ]
+            for key, label in mapping:
+                frame = None
+                try:
+                    frame = self.queues[key].get_nowait()
+                except queue.Empty:
+                    pass
+                if frame is None:
+                    continue
+                self._update_label_with_frame(label, frame)
         finally:
-            self._schedule_gui_refresh()
+            self._schedule_refresh()
+
+    def _schedule_map_refresh(self) -> None:
+        self.root.after(500, self._refresh_2d_map)
+
+    def _refresh_2d_map(self) -> None:
+        try:
+            self.ax.clear()
+            self.ax.set_xlim(-self.world_size/2, self.world_size/2)
+            self.ax.set_ylim(-self.world_size/2, self.world_size/2)
+            self.ax.set_aspect('equal', 'box')
+            self.ax.grid(True, color='#555555', alpha=0.3)
+            
+            # Draw terrain image if available
+            if self.terrain_img is not None:
+                extent = (-self.world_size/2, self.world_size/2, 
+                         -self.world_size/2, self.world_size/2)
+                self.ax.imshow(self.terrain_img, extent=extent, origin='lower', 
+                              zorder=0, interpolation='bilinear', alpha=0.6)
+            
+            # Draw paths
+            if self.paths['husky']:
+                xs, ys = zip(*self.paths['husky'])
+                self.ax.plot(xs, ys, '-', color='cyan', linewidth=2, alpha=0.7, label='Husky')
+            if self.paths['drone']:
+                xs, ys = zip(*self.paths['drone'])
+                self.ax.plot(xs, ys, '-', color='lime', linewidth=2, alpha=0.7, label='Drone')
+            
+            # Draw robot positions
+            if self.positions['husky']:
+                x, y = self.positions['husky']
+                self.ax.plot(x, y, 'cs', markersize=12, markeredgecolor='white', markeredgewidth=2)
+            if self.positions['drone']:
+                x, y = self.positions['drone']
+                self.ax.plot(x, y, 'g^', markersize=12, markeredgecolor='white', markeredgewidth=2)
+            
+            # Draw fires
+            if self.fire_positions:
+                fx, fy = zip(*self.fire_positions)
+                self.ax.scatter(fx, fy, c='red', s=100, marker='*', 
+                               edgecolors='yellow', linewidths=2, zorder=10)
+            
+            # Style
+            TEXT = '#e5e7eb'
+            self.ax.tick_params(colors=TEXT, labelsize=8)
+            for spine in self.ax.spines.values():
+                spine.set_color(TEXT)
+            if len(self.paths['husky']) > 0 or len(self.paths['drone']) > 0:
+                self.ax.legend(loc='upper right', fontsize=8, 
+                              facecolor='#1f2937', edgecolor=TEXT, labelcolor=TEXT)
+            
+            self.canvas.draw_idle()
+        except Exception as e:
+            self.get_logger().warn(f'2D map refresh error: {e}')
+        finally:
+            self._schedule_map_refresh()
 
     def _update_label_with_frame(self, label: tk.Label, frame_bgr) -> None:
-        # Resize to fit label area while keeping aspect ratio
+        # Resize with aspect ratio to fill area - use fixed small size for Steam Deck
         label.update_idletasks()
-        target_w = max(200, label.winfo_width())
-        target_h = max(150, label.winfo_height())
+        target_w = min(480, max(200, label.winfo_width()))  # Cap at 480px for performance
+        target_h = min(360, max(150, label.winfo_height()))  # Cap at 360px for performance
         h, w = frame_bgr.shape[:2]
         scale = min(target_w / w, target_h / h)
         new_w, new_h = max(1, int(w * scale)), max(1, int(h * scale))
-        resized = cv2.resize(frame_bgr, (new_w, new_h), interpolation=cv2.INTER_AREA)
+        
+        # Use INTER_NEAREST for fastest resizing (acceptable for Steam Deck display)
+        resized = cv2.resize(frame_bgr, (new_w, new_h), interpolation=cv2.INTER_NEAREST)
 
-        # Convert to Tk image
         rgb = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
         image = Image.fromarray(rgb)
         photo = ImageTk.PhotoImage(image=image)
 
-        # Thread-safe set on main thread
         def apply():
             label.configure(image=photo, text='')
-            label.image = photo  # keep reference
+            label.image = photo
         self.root.after(0, apply)
 
-    # ------------- Topic switching ---------
-    def toggle_drone_topic(self) -> None:
-        """
-        Toggle the drone subscription between DRONE_TOPIC_IR and DRONE_TOPIC_RGB.
-        Safe to call from the Tkinter thread; uses rclpy Subscription management.
-        """
-        new_topic = DRONE_TOPIC_RGB if self.current_drone_topic == DRONE_TOPIC_IR else DRONE_TOPIC_IR
-        try:
-            # Destroy previous subscription and create a new one
-            if self.drone_sub is not None:
-                self.destroy_subscription(self.drone_sub)
-            self.drone_sub = self.create_subscription(ROSImage, new_topic, self._on_drone_image, 10)
-            self.current_drone_topic = new_topic
-            # Update small label to show current mode
-            self.drone_topic_label.configure(text='RGB' if new_topic == DRONE_TOPIC_RGB else 'IR')
-            # Give visual feedback in the panel title area (optional print)
-            self.get_logger().info(f'Switched drone topic to: {new_topic}')
-        except Exception as exc:
-            self.get_logger().error(f'Failed to switch drone topic: {exc}')
 
-
-def start_ros_spin(node: Node) -> None:
-    def spin():
-        try:
-            rclpy.spin(node)
-        except Exception as exc:
-            node.get_logger().error(f'ROS spin error: {exc}')
-    t = threading.Thread(target=spin, daemon=True)
+def start_spin(node: Node) -> None:
+    t = threading.Thread(target=lambda: rclpy.spin(node), daemon=True)
     t.start()
 
 
 def main() -> None:
     rclpy.init()
     root = tk.Tk()
-    app = Ros2DualCameraGui(root)
-    start_ros_spin(app)
-
+    app = SteamDeckGui(root)
+    start_spin(app)
     try:
         root.mainloop()
     finally:
