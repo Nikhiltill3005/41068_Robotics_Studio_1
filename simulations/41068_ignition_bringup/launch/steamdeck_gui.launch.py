@@ -35,7 +35,7 @@ def generate_launch_description():
         # Default topics (override per your system)
         DeclareLaunchArgument('husky_rgb_topic', default_value='/husky/camera/image'),
         DeclareLaunchArgument('drone_rgb_topic', default_value='/drone/camera/image'),
-        DeclareLaunchArgument('husky_map_topic', default_value='/husky/map'),
+        DeclareLaunchArgument('husky_map_topic', default_value='/map'),
         DeclareLaunchArgument('husky_odom_topic', default_value='/husky/odometry'),
         DeclareLaunchArgument('drone_odom_topic', default_value='/drone/odometry'),
         DeclareLaunchArgument('fire_topic', default_value='/drone/fire_scan/fire_positions'),
