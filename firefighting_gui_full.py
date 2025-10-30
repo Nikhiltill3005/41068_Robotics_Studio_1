@@ -63,6 +63,7 @@ class FirefightingGUI(Node):
         self.declare_parameter('drone_rgb_topic', '/drone/fire_scan/debug_image')
         self.declare_parameter('drone_ir_topic', '/drone/ir_camera/image_raw')
         self.declare_parameter('husky_rgb_topic', '/husky/camera/image')
+        self.declare_parameter('slam_map_topic', '/map_updates')
         self.declare_parameter('husky_odom_topic', '/husky/odometry')
         self.declare_parameter('drone_odom_topic', '/drone/odometry')
         self.declare_parameter('fire_topic', '/drone/fire_scan/fire_positions')
@@ -81,6 +82,7 @@ class FirefightingGUI(Node):
             'drone_rgb': self.get_parameter('drone_rgb_topic').get_parameter_value().string_value,
             'drone_ir': self.get_parameter('drone_ir_topic').get_parameter_value().string_value,
             'husky_rgb': self.get_parameter('husky_rgb_topic').get_parameter_value().string_value,
+            'slam_map': self.get_parameter('slam_map_topic').get_parameter_value().string_value,
             'husky_odom': self.get_parameter('husky_odom_topic').get_parameter_value().string_value,
             'drone_odom': self.get_parameter('drone_odom_topic').get_parameter_value().string_value,
             'fires': self.get_parameter('fire_topic').get_parameter_value().string_value,
@@ -96,7 +98,7 @@ class FirefightingGUI(Node):
 
         # ---------- Application state ----------
         self.bridge = CvBridge()
-        self.camera_queues = {k: queue.Queue(maxsize=1) for k in ['drone_rgb', 'drone_ir', 'husky_rgb']}
+        self.camera_queues = {k: queue.Queue(maxsize=1) for k in ['drone_rgb', 'drone_ir', 'husky_rgb', 'slam_map']}
         self.camera_enabled = {k: True for k in self.camera_queues.keys()}
 
         # Positions and paths
@@ -151,6 +153,7 @@ class FirefightingGUI(Node):
         self.create_subscription(ROSImage, self.topics['drone_rgb'], lambda msg: self.image_cb(msg, 'drone_rgb'), 10)
         self.create_subscription(ROSImage, self.topics['drone_ir'], lambda msg: self.image_cb(msg, 'drone_ir'), 10)
         self.create_subscription(ROSImage, self.topics['husky_rgb'], lambda msg: self.image_cb(msg, 'husky_rgb'), 10)
+        self.create_subscription(ROSImage,self.topics['slam_map'],lambda msg: self.image_cb(msg,'slam_map'),10)
 
         # Odometry -> positions and path history
         self.create_subscription(Odometry, self.topics['husky_odom'], self.husky_odom_cb, 10)
@@ -232,17 +235,17 @@ class FirefightingGUI(Node):
     def setup_gui(self):
         self.root.title("Firefighting Robot Control Center")
         self.root.geometry("1600x1000")
-        self.root.configure(bg="#f2f4f8")
+        self.root.configure(bg="#cbe6a9")
 
         # ---------- Style ----------
         style = ttk.Style()
         style.theme_use("clam")
         style.configure("TButton", font=("Segoe UI", 10), padding=6, background="#0078d7", foreground="white")
         style.map("TButton", background=[("active", "#005a9e")])
-        style.configure("TLabel", background="#f2f4f8", foreground="#1e2a38", font=("Segoe UI", 10))
-        style.configure("TLabelframe", background="#ffffff", foreground="#1e2a38", padding=10)
+        style.configure("TLabel", background="#cbe6a9", foreground="#1e2a38", font=("Segoe UI", 10))
+        style.configure("TLabelframe", background="#cbe6a9", foreground="#1e2a38", padding=10)
         style.configure("TLabelframe.Label", font=("Segoe UI", 11, "bold"))
-        style.configure("TCheckbutton", background="#ffffff", foreground="#1e2a38")
+        style.configure("TCheckbutton", background="#cbe6a9", foreground="#1e2a38")
 
         # ---------- Top Bar ----------
         topbar = ttk.Frame(self.root, padding=6)
@@ -263,7 +266,7 @@ class FirefightingGUI(Node):
         stop_btn.pack(side=tk.LEFT, padx=4)
 
         self.teleop_label = tk.Label(topbar, text=f"Control: {self.active_robot.upper()}",
-                                    bg="#f2f4f8", fg="#1e2a38", font=("Segoe UI", 10))
+                                    bg="#cbe6a9", fg="#1e2a38", font=("Segoe UI", 10))
         self.teleop_label.pack(side=tk.LEFT, padx=10)
 
         ttk.Button(topbar, text="Return Home", command=lambda: self.log("Return Home triggered")).pack(side=tk.LEFT, padx=4)
@@ -285,12 +288,12 @@ class FirefightingGUI(Node):
         cam_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 6))
 
         self.cam_labels = {}
-        cams = ["drone_rgb", "drone_ir", "husky_rgb"]
+        cams = ["drone_rgb", "drone_ir", "husky_rgb","slam_map"]
         for idx, key in enumerate(cams):
-            lbl_frame = tk.Frame(cam_frame, width=320, height=240, bg="#e6e9ef", highlightbackground="#cccccc", highlightthickness=1)
+            lbl_frame = tk.Frame(cam_frame, width=320, height=240, bg="#cbe6a9", highlightbackground="#f8eded", highlightthickness=1)
             lbl_frame.grid(row=idx // 2, column=idx % 2, padx=6, pady=6)
             lbl_frame.grid_propagate(False)
-            lbl = tk.Label(lbl_frame, text=f"Waiting for {key}", bg="#e6e9ef", fg="#444", anchor="center")
+            lbl = tk.Label(lbl_frame, text=f"Waiting for {key}", bg="#cbe6a9", fg="#444", anchor="center")
             lbl.pack(fill=tk.BOTH, expand=True)
             self.cam_labels[key] = lbl
 
@@ -307,8 +310,8 @@ class FirefightingGUI(Node):
         map_frame = ttk.LabelFrame(middle, text="2D Map", padding=8)
         map_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
         self.fig, self.ax = plt.subplots(figsize=(7, 7))
-        self.fig.patch.set_facecolor("#ffffff")
-        self.ax.set_facecolor("#ffffff")
+        self.fig.patch.set_facecolor("#cbe6a9")
+        self.ax.set_facecolor("#cbe6a9")
         self.ax.grid(True, color="#cccccc", alpha=0.5)
         
         # Set aces to world size

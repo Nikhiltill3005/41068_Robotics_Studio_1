@@ -1,10 +1,22 @@
 #!/usr/bin/env python3
 """
+<<<<<<< HEAD
 steamdeck_gui.py
 Merged GUI: Steam Deck layout + mission log + status panel + date/time/mission timer
 Camera feeds: drone_rgb, drone_ir, husky_rgb (using compressed if available, raw fallback)
 SLAM map: subscribes to slam_map_topic
 Other topics: odometry, fire positions, battery, obstacles, control mode
+=======
+Steam Deck ROS2 GUI
+
+Optimized layout for 1280x800 (Steam Deck) with three panes:
+  - Switchable RGB Camera (Husky/Drone - toggle via touchscreen button) - LEFT 50% (MAIN FOCUS)
+  - SLAM Map (Husky) - top right
+  - 2D Terrain Map (robot positions, fires, paths) - bottom right
+
+Features a prominent fire detection status panel in the top bar.
+All topics are ROS2 parameters for easy override via launch file.
+>>>>>>> cfb7fe79ba3f400536ae46eb8dbd223350044247
 """
 
 import os
@@ -96,6 +108,7 @@ class SteamDeckGui(Node):
         self.positions = {'husky': None, 'drone': None}
         self.paths = {'husky': [], 'drone': []}
         self.fire_positions = []
+<<<<<<< HEAD
 
         # batteries, obstacles, sensor health
         self.batteries = {'husky': None, 'drone': None}
@@ -125,6 +138,12 @@ class SteamDeckGui(Node):
         self.mission_running = True
 
         # load terrain image
+=======
+        self.total_fires_detected = 0  # Track total unique fires detected
+        self.detected_fire_ids = set()  # Track unique fire locations to avoid double counting
+        
+        # Load terrain image
+>>>>>>> cfb7fe79ba3f400536ae46eb8dbd223350044247
         self.terrain_img = None
         if self.terrain_image_path:
             try:
@@ -189,6 +208,7 @@ class SteamDeckGui(Node):
         self.create_subscription(Bool, '/husky/obstacle', lambda m: self._on_obstacle(m, 'husky'), 10)
         self.create_subscription(Bool, '/drone/obstacle', lambda m: self._on_obstacle(m, 'drone'), 10)
 
+<<<<<<< HEAD
         # teleop / joy input (for teleop_active visual)
         self.create_subscription(Joy, '/joy', self._on_joy, 10)
 
@@ -205,14 +225,27 @@ class SteamDeckGui(Node):
     def _build_ui(self):
         # window
         self.root.title('Robotics Control - Steam Deck')
+=======
+    def _build_ui(self) -> None:
+        # Window setup for Steam Deck
+        self.root.title('Forest Fire Detection - Steam Deck')
+>>>>>>> cfb7fe79ba3f400536ae46eb8dbd223350044247
         try:
             self.root.geometry('1280x800')
         except Exception:
             pass
 
+<<<<<<< HEAD
         BG = '#0f172a'
         PANEL = '#1f2937'
         TEXT = '#e5e7eb'
+=======
+        BG = '#111827'      # gray-900 (darker)
+        PANEL = '#2d3748'   # smoke-gray
+        TEXT = '#e5e7eb'    # gray-200
+        FIRE_RED = '#ff4444'
+        FIRE_ORANGE = '#ff8800'
+>>>>>>> cfb7fe79ba3f400536ae46eb8dbd223350044247
 
         self.root.configure(bg=BG)
         style = ttk.Style()
@@ -224,6 +257,7 @@ class SteamDeckGui(Node):
         style.configure('Panel.TFrame', background=PANEL)
         style.configure('Panel.TLabel', background=PANEL, foreground=TEXT)
 
+<<<<<<< HEAD
         # Top bar
         top = ttk.Frame(self.root, padding=6, style='Dark.TFrame')
         top.pack(fill=tk.X)
@@ -233,6 +267,92 @@ class SteamDeckGui(Node):
                                   font=("Segoe UI", 10, "bold"), relief="flat", padx=8, pady=4,
                                   command=self.toggle_mode)
         self.mode_btn.pack(side=tk.LEFT, padx=4)
+=======
+        # Top bar with teleop status and fire detection panel
+        top = ttk.Frame(self.root, padding=8, style='Dark.TFrame')
+        top.pack(fill=tk.X)
+        
+        # Teleop status button (left side)
+        self.teleop_active = False
+        self.teleop_button = tk.Button(
+            top, 
+            text='Teleop Inactive', 
+            bg='#555555',
+            fg='white',
+            font=('Segoe UI', 11, 'bold'),
+            relief='flat',
+            padx=12,
+            pady=4,
+            state='disabled'
+        )
+        self.teleop_button.pack(side=tk.LEFT)
+
+        # FIRE DETECTION STATUS PANEL - Prominent dedicated section (right side)
+        fire_panel = tk.Frame(top, bg=PANEL, relief='solid', borderwidth=3, highlightbackground='#666', highlightthickness=1)
+        fire_panel.pack(side=tk.RIGHT, padx=(10, 0))
+        
+        # Fire icon and status
+        fire_header = tk.Frame(fire_panel, bg=PANEL)
+        fire_header.pack(fill=tk.X, padx=10, pady=(8, 2))
+        
+        fire_icon = tk.Label(
+            fire_header,
+            text='🔥',
+            bg=PANEL,
+            font=('Segoe UI', 24),
+        )
+        fire_icon.pack(side=tk.LEFT, padx=(0, 8))
+        
+        fire_text_container = tk.Frame(fire_header, bg=PANEL)
+        fire_text_container.pack(side=tk.LEFT)
+        
+        tk.Label(
+            fire_text_container,
+            text='FIRE DETECTION STATUS',
+            bg=PANEL,
+            fg=TEXT,
+            font=('Segoe UI', 9, 'bold')
+        ).pack(anchor='w')
+        
+        # Large status text that changes based on detection
+        self.fire_status_label = tk.Label(
+            fire_text_container,
+            text='NO FIRES DETECTED',
+            bg=PANEL,
+            fg='#10b981',  # Green when no fire
+            font=('Segoe UI', 14, 'bold')
+        )
+        self.fire_status_label.pack(anchor='w')
+        
+        # Fire counter section
+        fire_count_frame = tk.Frame(fire_panel, bg=PANEL)
+        fire_count_frame.pack(fill=tk.X, padx=10, pady=(2, 8))
+        
+        tk.Label(
+            fire_count_frame,
+            text='Total Detected:',
+            bg=PANEL,
+            fg='#9ca3af',
+            font=('Segoe UI', 9)
+        ).pack(side=tk.LEFT, padx=(0, 6))
+        
+        self.fire_count_label = tk.Label(
+            fire_count_frame,
+            text='0',
+            bg=PANEL,
+            fg=FIRE_ORANGE,
+            font=('Segoe UI', 16, 'bold')
+        )
+        self.fire_count_label.pack(side=tk.LEFT)
+
+        # Grid layout: Camera on left (50%), SLAM+2D Map stacked on right (50%)
+        grid = ttk.Frame(self.root, padding=8, style='Dark.TFrame')
+        grid.pack(fill=tk.BOTH, expand=True)
+        grid.columnconfigure(0, weight=1)  # Left column (camera)
+        grid.columnconfigure(1, weight=1)  # Right column (maps)
+        grid.rowconfigure(0, weight=1)  # Top row (camera / SLAM)
+        grid.rowconfigure(1, weight=1)  # Bottom row (2D Map)
+>>>>>>> cfb7fe79ba3f400536ae46eb8dbd223350044247
 
         # Emergency stop
         stop_btn = tk.Button(top, text="EMERGENCY STOP", bg="#e81123", fg="white",
@@ -434,13 +554,52 @@ class SteamDeckGui(Node):
             self.paths['drone'].pop(0)
         self.update_status_panel()
 
+<<<<<<< HEAD
     def _on_fires(self, msg: PoseArray):
+=======
+    def _on_fires(self, msg: PoseArray) -> None:
+        """Update fire positions and count unique fires detected."""
+>>>>>>> cfb7fe79ba3f400536ae46eb8dbd223350044247
         fires = []
         for p in msg.poses:
-            fires.append((p.position.x, p.position.y))
+            fire_pos = (p.position.x, p.position.y)
+            fires.append(fire_pos)
+            
+            # Create a unique ID for this fire location (rounded to 0.5m grid to avoid duplicates)
+            fire_id = (round(p.position.x * 2) / 2, round(p.position.y * 2) / 2)
+            
+            # If this is a new fire location, increment counter
+            if fire_id not in self.detected_fire_ids:
+                self.detected_fire_ids.add(fire_id)
+                self.total_fires_detected = len(self.detected_fire_ids)
+                self._update_fire_status()
+                self.get_logger().info(f'New fire detected at ({fire_pos[0]:.1f}, {fire_pos[1]:.1f}). Total: {self.total_fires_detected}')
+        
         self.fire_positions = fires
-        self.log(f"Fire updates: {len(fires)} detected")
-        self.update_status_panel()
+        
+        # Update status even if no new fires (to handle when fires go out of view)
+        if len(fires) == 0 and self.total_fires_detected == 0:
+            self._update_fire_status()
+
+    def _update_fire_status(self) -> None:
+        """Update the fire detection status panel in the GUI."""
+        def update():
+            if self.total_fires_detected > 0:
+                # FIRE DETECTED - Show alert status
+                self.fire_status_label.configure(
+                    text='⚠️ FIRE DETECTED ⚠️',
+                    fg='#ff4444'  # Bright red
+                )
+                self.fire_count_label.configure(text=str(self.total_fires_detected))
+            else:
+                # NO FIRE - Show safe status
+                self.fire_status_label.configure(
+                    text='NO FIRES DETECTED',
+                    fg='#10b981'  # Green
+                )
+                self.fire_count_label.configure(text='0')
+        
+        self.root.after(0, update)
 
     def _on_husky_batt(self, msg: Float32):
         try:
@@ -593,7 +752,9 @@ class SteamDeckGui(Node):
             photo = ImageTk.PhotoImage(img)
             def apply():
                 label.configure(image=photo, text='')
-                label.image = photo
+                label.image = photoion_bringup/scripts/steamdeck_gui.py 
+
+
             self.root.after(0, apply)
         except Exception as e:
             self.get_logger().warn(f'Failed to update label with frame: {e}')
