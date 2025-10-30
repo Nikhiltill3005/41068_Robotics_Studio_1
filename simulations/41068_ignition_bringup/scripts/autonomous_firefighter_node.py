@@ -54,7 +54,7 @@ class AutonomousFirefighter(Node):
         super().__init__('autonomous_firefighter')
 
         # Parameters
-        self.declare_parameter('target_distance', 1.8)  # Target distance from fire (meters) - increased for safety
+        self.declare_parameter('target_distance', 2.3)  # Target distance from fire (meters) - increased for safety
         self.declare_parameter('distance_tolerance', 0.4)  # Tolerance for positioning
         self.declare_parameter('extinguish_duration', 3.0)  # How long to extinguish (seconds)
         self.declare_parameter('auto_start', True)  # Auto-start firefighting
