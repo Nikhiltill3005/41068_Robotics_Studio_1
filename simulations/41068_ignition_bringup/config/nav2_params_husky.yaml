@@ -146,23 +146,23 @@ controller_server:
       min_vel_y: 0.0
       max_vel_x: 1.2
       max_vel_y: 0.0
-      max_vel_theta: 8.0
+      max_vel_theta: 20.0
       min_speed_xy: 0.0
       max_speed_xy: 1.2
       min_speed_theta: 0.0
       # Extremely aggressive acceleration for sharp steering
       acc_lim_x: 2.0
       acc_lim_y: 0.0
-      acc_lim_theta: 18.0
-      decel_lim_x: -2.0
+      acc_lim_theta: 50.0
+      decel_lim_x: -5.0
       decel_lim_y: 0.0
-      decel_lim_theta: -18.0
+      decel_lim_theta: -50.0
       # Optimized trajectory samples for aggressive tank steering with in-place turning
       vx_samples: 25
       vy_samples: 1
       vtheta_samples: 80
       # Shorter simulation time for aggressive, reactive steering
-      sim_time: 1.5
+      sim_time: 1.2
       linear_granularity: 0.02
       angular_granularity: 0.025
       transform_tolerance: 0.2
@@ -202,11 +202,11 @@ local_costmap:
       robot_base_frame: base_link
       use_sim_time: True
       rolling_window: true
-      width: 20
-      height: 20
+      width: 100
+      height: 100
       resolution: 0.025
       # Conservative Husky footprint: 0.99m x 0.57m + extra safety margin for forest navigation
-      footprint: "[ [0.65, 0.45], [0.65, -0.45], [-0.65, -0.45], [-0.65, 0.45] ]"
+      footprint: "[ [0.8125, 0.5625], [0.8125, -0.5625], [-0.8125, -0.5625], [-0.8125, 0.5625] ]"
       # Add transform tolerance to handle timing issues
       transform_tolerance: 0.5
       plugins: ["obstacle_layer", "inflation_layer"]
@@ -253,15 +253,15 @@ global_costmap:
       robot_base_frame: base_link
       use_sim_time: True
       # Conservative Husky footprint: 0.99m x 0.57m + extra safety margin for forest navigation
-      footprint: "[ [0.65, 0.45], [0.65, -0.45], [-0.65, -0.45], [-0.65, 0.45] ]"
+      footprint: "[ [0.8125, 0.5625], [0.8125, -0.5625], [-0.8125, -0.5625], [-0.8125, 0.5625] ]"
       # Use slightly coarser resolution to reduce memory usage and improve bounds handling
       resolution: 0.05
       track_unknown_space: true
       # Set initial map size and allow dynamic expansion
-      width: 400
-      height: 400
-      origin_x: -10.0
-      origin_y: -10.0
+      width: 1000
+      height: 1000
+      origin_x: -25.0
+      origin_y: -25.0
       rolling_window: false
       # Add transform tolerance to handle timing issues
       transform_tolerance: 0.5
@@ -356,6 +356,30 @@ behavior_server:
     max_rotational_vel: 1.0
     min_rotational_vel: 0.4
     rotational_acc_lim: 3.2
+
+robot_state_publisher:
+  ros__parameters:
+    use_sim_time: True
+
+waypoint_follower:
+  ros__parameters:
+    use_sim_time: True
+    loop_rate: 20
+    stop_on_failure: false
+    waypoint_task_executor_plugin: "wait_at_waypoint"
+    wait_at_waypoint:
+      plugin: "nav2_waypoint_follower::WaitAtWaypoint"
+      enabled: True
+      waypoint_pause_duration: 200
+
+velocity_smoother:
+  ros__parameters:
+    use_sim_time: True
+    smoothing_frequency: 20.0
+    scale_velocities: False
+    feedback: "OPEN_LOOP"
+    max_velocity: [1.2, 0.0, 8.0]
+    min_velocity: [0.0, 0.0, -8.0]
 
 robot_state_publisher:
   ros__parameters:
