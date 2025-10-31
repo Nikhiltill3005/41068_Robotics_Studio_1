@@ -206,7 +206,7 @@ class SteamDeckGui(Node):
         # window
         self.root.title('Robotics Control - Steam Deck')
         try:
-            self.root.geometry('1280x800')
+            self.root.geometry('1400x850')
         except Exception:
             pass
 
@@ -224,102 +224,100 @@ class SteamDeckGui(Node):
         style.configure('Panel.TFrame', background=PANEL)
         style.configure('Panel.TLabel', background=PANEL, foreground=TEXT)
 
-        # Top bar
+        # ---------- TOP BAR ----------
         top = ttk.Frame(self.root, padding=6, style='Dark.TFrame')
         top.pack(fill=tk.X)
 
-        # Mode toggle button
         self.mode_btn = tk.Button(top, text="Switch to MANUAL", bg="#0078d7", fg="white",
-                                  font=("Segoe UI", 10, "bold"), relief="flat", padx=8, pady=4,
-                                  command=self.toggle_mode)
+                                font=("Segoe UI", 10, "bold"), relief="flat", padx=8, pady=4,
+                                command=self.toggle_mode)
         self.mode_btn.pack(side=tk.LEFT, padx=4)
 
-        # Emergency stop
         stop_btn = tk.Button(top, text="EMERGENCY STOP", bg="#e81123", fg="white",
-                             font=("Segoe UI", 10, "bold"), relief="flat", padx=8, pady=4,
-                             command=lambda: self.log("EMERGENCY STOP triggered!"))
+                            font=("Segoe UI", 10, "bold"), relief="flat", padx=8, pady=4,
+                            command=lambda: self.log("EMERGENCY STOP triggered!"))
         stop_btn.pack(side=tk.LEFT, padx=4)
 
-        # teleop indicator
         self.teleop_button = tk.Button(top, text='Teleop Inactive', bg='#555555', fg='white',
-                                       font=('Segoe UI', 11, 'bold'), relief='flat', padx=12, pady=4, state='disabled')
+                                    font=('Segoe UI', 11, 'bold'), relief='flat', padx=12, pady=4, state='disabled')
         self.teleop_button.pack(side=tk.LEFT, padx=6)
 
-        # Save snapshot + export log
         ttk.Button(top, text="Save Snapshot", command=self.save_snapshot).pack(side=tk.LEFT, padx=4)
         ttk.Button(top, text="Export Log", command=self._export_log).pack(side=tk.LEFT, padx=4)
 
-        # Timer & date/time labels on right
         self.timer_label = ttk.Label(top, text="Mission Time: 00:00:00")
         self.timer_label.pack(side=tk.RIGHT, padx=8)
         self.system_time_label = ttk.Label(top, text=time.strftime("%Y-%m-%d %H:%M:%S"))
         self.system_time_label.pack(side=tk.RIGHT, padx=8)
 
-        # Main layout: left camera panel, right maps, bottom status/log
+        # ---------- MAIN LAYOUT ----------
         main = ttk.Frame(self.root)
         main.pack(fill=tk.BOTH, expand=True, padx=6, pady=6)
-        main.columnconfigure(0, weight=1)
-        main.columnconfigure(1, weight=1)
+        main.columnconfigure(0, weight=2)
+        main.columnconfigure(1, weight=2)
+        main.columnconfigure(2, weight=1)
         main.rowconfigure(0, weight=1)
-        main.rowconfigure(1, weight=1)
 
-        # Left: Multiple small camera feeds (drone_rgb, drone_ir, husky_rgb)
+        # ---------- CAMERA PANEL (LEFT) ----------
         cam_frame = ttk.LabelFrame(main, text="Camera Feeds", padding=8)
-        cam_frame.grid(row=0, column=0, rowspan=2, sticky='nsew', padx=(0, 6), pady=(0,0))
+        cam_frame.grid(row=0, column=0, sticky='nsew', padx=(0, 6))
+        cam_frame.pack_propagate(False)
 
-        # Large switchable RGB (husky/drone) as main view at top of cam_frame
-        header_frame = tk.Frame(cam_frame, bg=PANEL)
-        header_frame.pack(fill=tk.X)
-        self.rgb_camera_header = ttk.Label(header_frame, text='RGB Camera', style='Panel.TLabel', font=('Segoe UI', 11, 'bold'))
-        self.rgb_camera_header.pack(side=tk.LEFT)
-        self.camera_toggle_btn = tk.Button(header_frame, text='Viewing: HUSKY', bg='#2563eb', fg='white',
-                                           font=('Segoe UI', 10, 'bold'), relief='flat', padx=12, pady=4,
-                                           command=self._toggle_camera)
-        self.camera_toggle_btn.pack(side=tk.RIGHT, padx=(10, 0))
-
+        # Large RGB feed
         self.lbl_switchable_rgb = tk.Label(cam_frame, bg='black', fg='white', text='Waiting for RGB...')
-        self.lbl_switchable_rgb.pack(fill=tk.BOTH, expand=True, pady=(6, 6))
+        self.lbl_switchable_rgb.pack(pady=5)
+        self.lbl_switchable_rgb.configure(width=640, height=360)  # fixed size (approx 16:9)
 
-        # Below that, two smaller feeds: drone_ir and hv (optionally)
-        small_row = tk.Frame(cam_frame)
-        small_row.pack(fill=tk.X)
+        # Row for smaller IR and secondary feed
+        small_row = tk.Frame(cam_frame, bg=PANEL)
+        small_row.pack(pady=8)
         self.lbl_drone_ir = tk.Label(small_row, bg='black', fg='white', text='Drone IR')
-        self.lbl_drone_ir.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=3, pady=3)
+        self.lbl_drone_ir.pack(side=tk.LEFT, padx=6)
+        self.lbl_drone_ir.configure(width=320, height=240)
         self.lbl_husky_cam_small = tk.Label(small_row, bg='black', fg='white', text='Husky RGB (small)')
-        self.lbl_husky_cam_small.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=3, pady=3)
+        self.lbl_husky_cam_small.pack(side=tk.RIGHT, padx=6)
+        self.lbl_husky_cam_small.configure(width=320, height=240)
 
-        # Right column: SLAM (top), 2D terrain (bottom)
-        # SLAM
-        p_slam = ttk.LabelFrame(main, text="SLAM Map (Husky)", padding=6)
-        p_slam.grid(row=0, column=1, sticky='nsew', padx=(6, 0), pady=(0, 6))
-        self.lbl_slam_map = tk.Label(p_slam, bg='black', fg='white', text='Waiting for SLAM map...')
+        # ---------- MAPS (CENTER) ----------
+        maps_frame = ttk.Frame(main, padding=6, style='Panel.TFrame')
+        maps_frame.grid(row=0, column=1, sticky='nsew', padx=6)
+        maps_frame.columnconfigure(0, weight=1)
+        maps_frame.rowconfigure(0, weight=1)
+        maps_frame.rowconfigure(1, weight=1)
+
+        # SLAM map
+        slam_frame = ttk.LabelFrame(maps_frame, text="SLAM Map (Husky)", padding=6)
+        slam_frame.grid(row=0, column=0, sticky='nsew', pady=(0, 6))
+        self.lbl_slam_map = tk.Label(slam_frame, bg='black', fg='white', text='Waiting for SLAM map...')
         self.lbl_slam_map.pack(fill=tk.BOTH, expand=True)
 
-        # 2D Terrain Map
-        p_terrain = ttk.LabelFrame(main, text="2D Map (Terrain)", padding=6)
-        p_terrain.grid(row=1, column=1, sticky='nsew', padx=(6, 0), pady=(6, 0))
-        self.fig, self.ax = plt.subplots(figsize=(5, 4))
-        self.fig.patch.set_facecolor("#ffffff")
+        # 2D Terrain map
+        terrain_frame = ttk.LabelFrame(maps_frame, text="2D Map (Terrain)", padding=6)
+        terrain_frame.grid(row=1, column=0, sticky='nsew', pady=(6, 0))
+        self.fig, self.ax = plt.subplots(figsize=(5.5, 4.5))
         self.ax.set_facecolor("#ffffff")
         self.ax.set_xlim(-self.world_size/2, self.world_size/2)
         self.ax.set_ylim(-self.world_size/2, self.world_size/2)
-        self.ax.set_aspect('equal', 'box')
-        self.ax.grid(True, color="#cccccc", alpha=0.5)
-        self.canvas = FigureCanvasTkAgg(self.fig, master=p_terrain)
+        self.ax.grid(True, alpha=0.3)
+        self.canvas = FigureCanvasTkAgg(self.fig, master=terrain_frame)
         self.canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
 
-        # Bottom: Status + Mission Log
-        bottom = ttk.Frame(self.root)
-        bottom.pack(fill=tk.BOTH, expand=False, padx=6, pady=6)
+        # ---------- STATUS + MISSION LOG (RIGHT) ----------
+        side_panel = ttk.Frame(main, style='Panel.TFrame')
+        side_panel.grid(row=0, column=2, sticky='nsew', padx=(6, 0))
+        side_panel.rowconfigure(0, weight=0)
+        side_panel.rowconfigure(1, weight=1)
 
-        status_frame = ttk.LabelFrame(bottom, text="Status", padding=6)
-        status_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 6))
+        # Status indicators
+        status_frame = ttk.LabelFrame(side_panel, text="Status", padding=6)
+        status_frame.grid(row=0, column=0, sticky='ew', pady=(0, 10))
 
         ttk.Label(status_frame, text="Husky Battery").pack(anchor="w")
-        self.husky_batt_pb = ttk.Progressbar(status_frame, length=150, mode="determinate", maximum=100)
+        self.husky_batt_pb = ttk.Progressbar(status_frame, length=180, mode="determinate", maximum=100)
         self.husky_batt_pb.pack(anchor="w", pady=2)
+
         ttk.Label(status_frame, text="Drone Battery").pack(anchor="w", pady=(6, 0))
-        self.drone_batt_pb = ttk.Progressbar(status_frame, length=150, mode="determinate", maximum=100)
+        self.drone_batt_pb = ttk.Progressbar(status_frame, length=180, mode="determinate", maximum=100)
         self.drone_batt_pb.pack(anchor="w", pady=2)
 
         self.fire_count_var = tk.StringVar(value="Fires: 0")
@@ -337,10 +335,10 @@ class SteamDeckGui(Node):
         self.sensor_health_var = tk.StringVar(value="Sensors: OK")
         ttk.Label(status_frame, textvariable=self.sensor_health_var).pack(anchor="w", pady=(8, 0))
 
-        # Mission log
-        log_frame = ttk.LabelFrame(bottom, text="Mission Log", padding=6)
-        log_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
-        self.log_box = scrolledtext.ScrolledText(log_frame, height=8, bg="#f7f9fb", fg="#1e2a38", font=("Consolas", 9))
+        # Mission Log
+        log_frame = ttk.LabelFrame(side_panel, text="Mission Log", padding=6)
+        log_frame.grid(row=1, column=0, sticky='nsew')
+        self.log_box = scrolledtext.ScrolledText(log_frame, height=10, bg="#f7f9fb", fg="#1e2a38", font=("Consolas", 9))
         self.log_box.pack(fill=tk.BOTH, expand=True)
         self.log_box.config(state="disabled")
 
