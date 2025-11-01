@@ -31,7 +31,7 @@ from nav2_msgs.srv import ClearEntireCostmap
 from std_srvs.srv import Empty
 from geometry_msgs.msg import PoseArray, Pose, PoseStamped, Point, Twist
 from nav_msgs.msg import Odometry
-from std_msgs.msg import Header, ColorRGBA
+from std_msgs.msg import Header, ColorRGBA, Float32
 from visualization_msgs.msg import Marker, MarkerArray
 import math
 from enum import Enum
@@ -49,6 +49,8 @@ class FirefighterState(Enum):
     EXTINGUISHING = 3     # Extinguishing fire (APPROACHING removed - trust Nav2)
     COMPLETED = 4         # All fires handled
     BACKING_UP = 5        # Recovery: backing up to clear obstacles
+    RETURNING_TO_BASE = 6 # Returning to charging station
+    CHARGING = 7          # Charging at base station
 
 
 class AutonomousFirefighter(Node):
@@ -67,6 +69,17 @@ class AutonomousFirefighter(Node):
         self.declare_parameter('fire_match_tolerance', 1.0)  # Distance tolerance for matching fire positions (meters)
         self.declare_parameter('enable_multi_angle_approach', False)  # Enable trying multiple approach angles
         self.declare_parameter('enable_backup_recovery', True)  # Enable backup recovery maneuver
+        
+        # Battery system parameters
+        self.declare_parameter('battery_capacity', 100.0)  # Full battery percentage
+        self.declare_parameter('battery_drain_per_meter', 0.5)  # Battery % drained per meter traveled
+        self.declare_parameter('fires_per_charge', 2)  # Number of fires before needing recharge
+        self.declare_parameter('charging_duration', 10.0)  # Seconds to fully recharge
+        self.declare_parameter('low_battery_threshold', 15.0)  # Battery % to trigger return to base
+        self.declare_parameter('charging_station_x', 0.0)  # Charging station X position
+        self.declare_parameter('charging_station_y', 0.0)  # Charging station Y position
+        self.declare_parameter('charging_distance_threshold', 1.5)  # Distance to be "at" charging station
+        
         self.last_skip_time = 0.0  # Cooldown for skipping fires
         self.skip_cooldown = 2.0  # Seconds to wait after skipping a fire
 
@@ -106,6 +119,22 @@ class AutonomousFirefighter(Node):
         self.robot_velocity = 0.0  # Linear velocity magnitude
         self.robot_linear_x = 0.0
         self.robot_linear_y = 0.0
+
+        # Battery system
+        self.battery_level = self.get_parameter('battery_capacity').value  # Start at 100%
+        self.battery_capacity = self.get_parameter('battery_capacity').value
+        self.battery_drain_per_meter = self.get_parameter('battery_drain_per_meter').value
+        self.fires_per_charge = self.get_parameter('fires_per_charge').value
+        self.charging_duration = self.get_parameter('charging_duration').value
+        self.low_battery_threshold = self.get_parameter('low_battery_threshold').value
+        self.charging_station_pos = (
+            self.get_parameter('charging_station_x').value,
+            self.get_parameter('charging_station_y').value
+        )
+        self.charging_distance_threshold = self.get_parameter('charging_distance_threshold').value
+        self.fires_since_charge = 0  # Counter for fires extinguished since last charge
+        self.last_position = None  # For tracking distance traveled
+        self.charging_start_time = None  # Timer for charging duration
 
         # Navigation
         self.nav_client = ActionClient(self, NavigateToPose, 'navigate_to_pose')
@@ -156,9 +185,17 @@ class AutonomousFirefighter(Node):
             10
         )
 
+        # Battery level publisher
+        self.battery_pub = self.create_publisher(
+            Float32,
+            '/husky/battery_level',
+            10
+        )
+
         # State machine timer
         self.state_machine_timer = self.create_timer(0.1, self.state_machine_update)
         self.status_timer = self.create_timer(2.0, self.publish_status)
+        self.battery_timer = self.create_timer(1.0, self.publish_battery_level)
 
         self.get_logger().info('=== Autonomous Firefighter Initialized ===')
         self.get_logger().info(f'Target distance: {self.target_distance}m')
@@ -166,6 +203,10 @@ class AutonomousFirefighter(Node):
         self.get_logger().info(f'Auto-start: {self.auto_start}')
         self.get_logger().info(f'Multi-angle approach: {self.enable_multi_angle_approach}')
         self.get_logger().info(f'Backup recovery: {self.enable_backup_recovery}')
+        self.get_logger().info(f'Battery capacity: {self.battery_capacity}%')
+        self.get_logger().info(f'Fires per charge: {self.fires_per_charge}')
+        self.get_logger().info(f'Charging station: ({self.charging_station_pos[0]}, {self.charging_station_pos[1]})')
+        self.get_logger().info(f'Battery drain: {self.battery_drain_per_meter}% per meter')
         
         # Scan world for fire entities
         self.scan_world_for_fires()
@@ -392,7 +433,20 @@ class AutonomousFirefighter(Node):
 
     def odom_callback(self, msg):
         """Update robot position and velocity"""
-        self.robot_position = msg.pose.pose.position
+        current_pos = msg.pose.pose.position
+        
+        # Track distance traveled for battery drain
+        if self.last_position is not None and self.state != FirefighterState.CHARGING:
+            distance = math.sqrt(
+                (current_pos.x - self.last_position.x)**2 +
+                (current_pos.y - self.last_position.y)**2
+            )
+            # Drain battery based on distance
+            battery_drain = distance * self.battery_drain_per_meter
+            self.battery_level = max(0.0, self.battery_level - battery_drain)
+        
+        self.last_position = current_pos
+        self.robot_position = current_pos
         self.robot_orientation = msg.pose.pose.orientation
 
         # Extract velocity
@@ -509,6 +563,10 @@ class AutonomousFirefighter(Node):
             self.handle_completed_state()
         elif self.state == FirefighterState.BACKING_UP:
             self.handle_backing_up_state()
+        elif self.state == FirefighterState.RETURNING_TO_BASE:
+            self.handle_returning_to_base_state()
+        elif self.state == FirefighterState.CHARGING:
+            self.handle_charging_state()
 
     def handle_idle_state(self):
         """IDLE state: Wait for fires to appear"""
@@ -521,6 +579,17 @@ class AutonomousFirefighter(Node):
 
     def handle_planning_state(self):
         """PLANNING state: Sort and prioritize fires"""
+        # Check if battery is low or fire limit reached - return to base
+        if self.battery_level <= self.low_battery_threshold:
+            self.get_logger().warn(f'⚠️ Low battery ({self.battery_level:.1f}%) - Returning to charging station!')
+            self.transition_to_state(FirefighterState.RETURNING_TO_BASE)
+            return
+        
+        if self.fires_since_charge >= self.fires_per_charge:
+            self.get_logger().info(f'🔋 Fire limit reached ({self.fires_since_charge}/{self.fires_per_charge}) - Returning to recharge!')
+            self.transition_to_state(FirefighterState.RETURNING_TO_BASE)
+            return
+        
         # Check cooldown after skipping a fire
         time_since_skip = time.time() - self.last_skip_time
         if time_since_skip < self.skip_cooldown:
@@ -703,9 +772,10 @@ class AutonomousFirefighter(Node):
                 self.current_target_fire.position.z
             )
             self.extinguished_fires.append(fire_pos)
+            self.fires_since_charge += 1  # Increment fire counter
 
             self.get_logger().info(
-                f'Fire EXTINGUISHED! Total: {len(self.extinguished_fires)}'
+                f'Fire EXTINGUISHED! Total: {len(self.extinguished_fires)} (Since charge: {self.fires_since_charge}/{self.fires_per_charge})'
             )
 
             # Find and delete the fire entity from simulation
@@ -748,17 +818,46 @@ class AutonomousFirefighter(Node):
                 self.transition_to_state(FirefighterState.COMPLETED)
 
     def handle_completed_state(self):
-        """COMPLETED state: All known fires extinguished"""
-        # Check periodically if new fires have appeared
-        time_in_state = time.time() - self.state_start_time
-
-        if time_in_state > 5.0:  # Check every 5 seconds
-            if len(self.detected_fires) > 0:
-                self.get_logger().info(f'New fire(s) detected! Resuming operations.')
-                self.transition_to_state(FirefighterState.PLANNING)
+        """COMPLETED state: All known fires extinguished - return to charging pad"""
+        # Check if we're at the charging station
+        if self.robot_position:
+            dist_to_base = math.sqrt(
+                (self.robot_position.x - self.charging_station_pos[0])**2 +
+                (self.robot_position.y - self.charging_station_pos[1])**2
+            )
+            
+            # If not at charging station, navigate there
+            if dist_to_base > self.charging_distance_threshold:
+                # Only send goal if not already navigating
+                if self.current_goal_handle is None and self.navigation_result is None:
+                    goal_msg = NavigateToPose.Goal()
+                    goal_msg.pose.header.frame_id = 'map'
+                    goal_msg.pose.header.stamp = self.get_clock().now().to_msg()
+                    goal_msg.pose.pose.position.x = self.charging_station_pos[0]
+                    goal_msg.pose.pose.position.y = self.charging_station_pos[1]
+                    goal_msg.pose.pose.position.z = 0.0
+                    goal_msg.pose.pose.orientation.w = 1.0
+                    
+                    self.get_logger().info(f'🏁 All fires extinguished! Returning to charging pad at ({self.charging_station_pos[0]:.1f}, {self.charging_station_pos[1]:.1f})...')
+                    
+                    send_goal_future = self.nav_client.send_goal_async(goal_msg)
+                    send_goal_future.add_done_callback(self.goal_response_callback)
             else:
-                # Still completed, reset timer
-                self.state_start_time = time.time()
+                # At charging station - just monitor for new fires
+                time_in_state = time.time() - self.state_start_time
+                
+                if time_in_state > 5.0:  # Check every 5 seconds
+                    if len(self.detected_fires) > 0:
+                        self.get_logger().info(f'New fire(s) detected! Resuming operations from charging pad.')
+                        # Cancel any navigation goal
+                        if self.current_goal_handle is not None:
+                            self.current_goal_handle.cancel_goal_async()
+                            self.current_goal_handle = None
+                        self.navigation_result = None
+                        self.transition_to_state(FirefighterState.PLANNING)
+                    else:
+                        # Still completed, reset timer
+                        self.state_start_time = time.time()
 
     def handle_backing_up_state(self):
         """BACKING_UP state: Recovery maneuver to clear obstacles"""
@@ -790,6 +889,72 @@ class AutonomousFirefighter(Node):
 
             # Return to navigating state to retry
             self.transition_to_state(FirefighterState.NAVIGATING)
+
+    def handle_returning_to_base_state(self):
+        """RETURNING_TO_BASE state: Navigate back to charging station"""
+        # Check if we've arrived at charging station
+        if self.robot_position:
+            dist_to_base = math.sqrt(
+                (self.robot_position.x - self.charging_station_pos[0])**2 +
+                (self.robot_position.y - self.charging_station_pos[1])**2
+            )
+            
+            if dist_to_base < self.charging_distance_threshold:
+                # Arrived at charging station
+                self.get_logger().info(f'✓ Arrived at charging station! Starting recharge...')
+                # Cancel any active navigation goal
+                if self.current_goal_handle is not None:
+                    self.current_goal_handle.cancel_goal_async()
+                    self.current_goal_handle = None
+                self.navigation_result = None
+                self.transition_to_state(FirefighterState.CHARGING)
+                return
+        
+        # Send navigation goal to charging station if not already navigating
+        if self.current_goal_handle is None and self.navigation_result is None:
+            goal_msg = NavigateToPose.Goal()
+            goal_msg.pose.header.frame_id = 'map'
+            goal_msg.pose.header.stamp = self.get_clock().now().to_msg()
+            goal_msg.pose.pose.position.x = self.charging_station_pos[0]
+            goal_msg.pose.pose.position.y = self.charging_station_pos[1]
+            goal_msg.pose.pose.position.z = 0.0
+            goal_msg.pose.pose.orientation.w = 1.0
+            
+            self.get_logger().info(f'Navigating to charging station at ({self.charging_station_pos[0]:.1f}, {self.charging_station_pos[1]:.1f})...')
+            
+            send_goal_future = self.nav_client.send_goal_async(goal_msg)
+            send_goal_future.add_done_callback(self.goal_response_callback)
+
+    def handle_charging_state(self):
+        """CHARGING state: Recharge battery at charging station"""
+        # Start charging timer on first entry
+        if self.charging_start_time is None:
+            self.charging_start_time = time.time()
+            self.get_logger().info(f'⚡ Charging started (battery at {self.battery_level:.1f}%)')
+        
+        elapsed = time.time() - self.charging_start_time
+        charging_progress = min(100.0, (elapsed / self.charging_duration) * 100.0)
+        
+        # Recharge battery based on elapsed time
+        charge_rate = self.battery_capacity / self.charging_duration  # % per second
+        self.battery_level = min(self.battery_capacity, 
+                                 self.battery_level + charge_rate * 0.1)  # Update every 0.1s
+        
+        # Check if charging complete
+        if elapsed >= self.charging_duration:
+            self.battery_level = self.battery_capacity  # Ensure full charge
+            self.fires_since_charge = 0  # Reset fire counter
+            self.charging_start_time = None
+            
+            self.get_logger().info(f'🔋 Charging COMPLETE! Battery: {self.battery_level:.1f}% (Fire counter reset)')
+            
+            # Check if there are fires to handle
+            if len(self.detected_fires) > 0:
+                self.get_logger().info('Resuming firefighting operations...')
+                self.transition_to_state(FirefighterState.PLANNING)
+            else:
+                self.get_logger().info('No fires detected. Returning to IDLE.')
+                self.transition_to_state(FirefighterState.IDLE)
 
     def calculate_approach_pose(self, fire_pose):
         """Calculate position to approach fire from (at target distance)
@@ -1038,8 +1203,10 @@ class AutonomousFirefighter(Node):
 
         # Status text
         status_text = f'State: {self.state.name}\n'
+        status_text += f'Battery: {self.battery_level:.1f}%\n'
         status_text += f'Fires: {len(self.detected_fires)} detected, '
-        status_text += f'{len(self.extinguished_fires)} extinguished'
+        status_text += f'{len(self.extinguished_fires)} extinguished\n'
+        status_text += f'Since charge: {self.fires_since_charge}/{self.fires_per_charge}'
 
         marker.text = status_text
 
@@ -1058,16 +1225,30 @@ class AutonomousFirefighter(Node):
             marker.color.r = 0.0
             marker.color.g = 0.5
             marker.color.b = 1.0
+        elif self.state == FirefighterState.RETURNING_TO_BASE:
+            marker.color.r = 1.0
+            marker.color.g = 0.5
+            marker.color.b = 0.0  # Orange - returning home
+        elif self.state == FirefighterState.CHARGING:
+            marker.color.r = 0.0
+            marker.color.g = 1.0
+            marker.color.b = 0.5  # Cyan - charging
         else:
             marker.color.r = 1.0
             marker.color.g = 1.0
-            marker.color.g = 1.0
+            marker.color.b = 1.0
 
         marker.color.a = 1.0
 
         marker.lifetime.sec = 3
 
         self.status_marker_pub.publish(marker)
+
+    def publish_battery_level(self):
+        """Publish current battery level"""
+        battery_msg = Float32()
+        battery_msg.data = self.battery_level
+        self.battery_pub.publish(battery_msg)
 
 
 def main(args=None):

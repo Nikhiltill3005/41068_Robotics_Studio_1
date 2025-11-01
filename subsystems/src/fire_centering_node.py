@@ -66,6 +66,7 @@ class FireScanNode(Node):
         self.search_waypoints = []
         self.current_waypoint = 0
         self.search_active = self.auto_search  # Only search if auto_search enabled
+        self.search_completed = False  # Track if search has completed
         
         # Fire logging - much simpler
         self.detected_fires = []  # List of world positions
@@ -75,6 +76,7 @@ class FireScanNode(Node):
         self.cmd_vel_pub = self.create_publisher(Twist, '/drone/cmd_vel', 10)
         self.fire_positions_pub = self.create_publisher(PoseArray, '/drone/fire_scan/fire_positions', 10)
         self.debug_image_pub = self.create_publisher(Image, '/drone/fire_scan/debug_image', 10)
+        self.search_status_pub = self.create_publisher(Bool, '/drone/fire_scan/start_search', 10)
         
         # Subscribers
         self.thermal_sub = self.create_subscription(Image, '/drone/ir_camera/image_raw', self.thermal_callback, 1)
@@ -107,10 +109,10 @@ class FireScanNode(Node):
         """Toggle search pattern execution"""
         if msg.data and not self.search_active:
             self.search_active = True
-            self.get_logger().info('SEARCH ACTIVATED - Starting continuous zigzag pattern')
-            # Reset to beginning if already completed
-            if self.current_waypoint >= len(self.search_waypoints):
-                self.current_waypoint = 0
+            self.search_completed = False
+            self.current_waypoint = 0  # Always restart from beginning
+            self.get_logger().info('SEARCH ACTIVATED - Starting continuous zigzag pattern from beginning')
+            self.get_logger().info(f'Current fires detected: {len(self.detected_fires)}')
         elif not msg.data and self.search_active:
             self.search_active = False
             self.get_logger().info('SEARCH PAUSED - Debug visualization continues')
@@ -243,8 +245,22 @@ class FireScanNode(Node):
         cmd = Twist()
         
         if self.current_waypoint >= len(self.search_waypoints):
-            # Pattern complete
-            self.get_logger().info(f"Search pattern completed! Found {len(self.detected_fires)} fires total.")
+            # Pattern complete - only announce once
+            if not self.search_completed:
+                self.search_completed = True
+                self.search_active = False
+                self.get_logger().info('=' * 60)
+                self.get_logger().info(f"SEARCH PATTERN COMPLETED!")
+                self.get_logger().info(f"Found {len(self.detected_fires)} fires total:")
+                for i, fire in enumerate(self.detected_fires):
+                    self.get_logger().info(f"  Fire {i+1}: World({fire[0]:.1f}, {fire[1]:.1f})")
+                self.get_logger().info('Send True to /drone/fire_scan/start_search to restart scan')
+                self.get_logger().info('=' * 60)
+                
+                # Publish completion status (False = not active)
+                status_msg = Bool()
+                status_msg.data = False
+                self.search_status_pub.publish(status_msg)
             return cmd
         
         # Navigate to current waypoint
@@ -385,8 +401,16 @@ class FireScanNode(Node):
                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
             
             # Add search status
-            search_status = "SEARCH: ACTIVE" if self.search_active else "SEARCH: PAUSED"
-            search_color = (0, 255, 0) if self.search_active else (0, 165, 255)  # Green if active, orange if paused
+            if self.search_completed:
+                search_status = "SEARCH: COMPLETED"
+                search_color = (255, 0, 255)  # Magenta for completed
+            elif self.search_active:
+                search_status = "SEARCH: ACTIVE"
+                search_color = (0, 255, 0)  # Green for active
+            else:
+                search_status = "SEARCH: PAUSED"
+                search_color = (0, 165, 255)  # Orange for paused
+            
             cv2.putText(debug_image, search_status, (10, 120),
                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, search_color, 2)
         
@@ -462,7 +486,13 @@ class FireScanNode(Node):
             
         height = self.drone_position.z if self.drone_position else 0.0
         waypoint_progress = f"{self.current_waypoint + 1}/{len(self.search_waypoints)}" if self.search_waypoints else "0/0"
-        search_status = "ACTIVE" if self.search_active else "PAUSED"
+        
+        if self.search_completed:
+            search_status = "COMPLETED"
+        elif self.search_active:
+            search_status = "ACTIVE"
+        else:
+            search_status = "PAUSED"
         
         self.get_logger().info(f'Status: {search_status} - Height: {height:.1f}m, Waypoint: {waypoint_progress}, Fires: {len(self.detected_fires)}')
 
