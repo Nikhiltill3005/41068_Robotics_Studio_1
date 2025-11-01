@@ -206,7 +206,7 @@ class SteamDeckGui(Node):
         # window
         self.root.title('Robotics Control - Steam Deck')
         try:
-            self.root.geometry('1400x850')
+            self.root.geometry('1600x900')    # 1400x850
         except Exception:
             pass
 
@@ -252,38 +252,46 @@ class SteamDeckGui(Node):
 
         # ---------- MAIN LAYOUT ----------
         main = ttk.Frame(self.root)
-        main.pack(fill=tk.BOTH, expand=True, padx=6, pady=6)
-        main.columnconfigure(0, weight=2)
-        main.columnconfigure(1, weight=2)
-        main.columnconfigure(2, weight=1)
+        main.pack(fill=tk.BOTH, expand=True, padx=4, pady=4)
+        main.columnconfigure(0, weight=5)   # LEFT (camera) - main focus
+        main.columnconfigure(1, weight=3)   # CENTER (maps)
+        main.columnconfigure(2, weight=2)   # RIGHT (status + logs)
         main.rowconfigure(0, weight=1)
 
         # ---------- CAMERA PANEL (LEFT) ----------
-        cam_frame = ttk.LabelFrame(main, text="Camera Feeds", padding=8)
-        cam_frame.grid(row=0, column=0, sticky='nsew', padx=(0, 6))
-        cam_frame.pack_propagate(False)
+        cam_frame = ttk.LabelFrame(main, text="RGB Camera", padding=4)
+        cam_frame.grid(row=0, column=0, sticky='nsew', padx=(0, 4))
+        cam_frame.rowconfigure(1, weight=1)
+        cam_frame.columnconfigure(0, weight=1)
 
-        # Large RGB feed
+        # Camera toggle button (Husky <-> Drone)
+        self.cam_toggle_btn = tk.Button(cam_frame, text="View: Husky RGB", bg="#2563eb", fg="white",
+                                        font=("Segoe UI", 10, "bold"), relief="flat",
+                                        command=self._toggle_rgb_camera)
+        self.cam_toggle_btn.grid(row=0, column=0, sticky="ew", pady=4)
+
+        # Main RGB feed
         self.lbl_switchable_rgb = tk.Label(cam_frame, bg='black', fg='white', text='Waiting for RGB...')
-        self.lbl_switchable_rgb.pack(pady=5)
-        self.lbl_switchable_rgb.configure(width=640, height=360)  # fixed size (approx 16:9)
+        self.lbl_switchable_rgb.grid(row=1, column=0, sticky='nsew', pady=4)
 
         # Row for smaller IR and secondary feed
         small_row = tk.Frame(cam_frame, bg=PANEL)
-        small_row.pack(pady=8)
+        small_row.grid(row=2, column=0, pady=8, sticky='ew')
+        small_row.columnconfigure(0, weight=1)
+        small_row.columnconfigure(1, weight=1)
         self.lbl_drone_ir = tk.Label(small_row, bg='black', fg='white', text='Drone IR')
-        self.lbl_drone_ir.pack(side=tk.LEFT, padx=6)
+        self.lbl_drone_ir.grid(row=0, column=0, padx=6, sticky='nsew')
         self.lbl_drone_ir.configure(width=320, height=240)
         self.lbl_husky_cam_small = tk.Label(small_row, bg='black', fg='white', text='Husky RGB (small)')
-        self.lbl_husky_cam_small.pack(side=tk.RIGHT, padx=6)
+        self.lbl_husky_cam_small.grid(row=0, column=1, padx=6, sticky='nsew')
         self.lbl_husky_cam_small.configure(width=320, height=240)
 
         # ---------- MAPS (CENTER) ----------
         maps_frame = ttk.Frame(main, padding=6, style='Panel.TFrame')
         maps_frame.grid(row=0, column=1, sticky='nsew', padx=6)
         maps_frame.columnconfigure(0, weight=1)
-        maps_frame.rowconfigure(0, weight=1)
-        maps_frame.rowconfigure(1, weight=1)
+        maps_frame.rowconfigure(0, weight=2)  # SLAM gets more space
+        maps_frame.rowconfigure(1, weight=1)  # Terrain map smaller
 
         # SLAM map
         slam_frame = ttk.LabelFrame(maps_frame, text="SLAM Map (Husky)", padding=6)
@@ -347,6 +355,13 @@ class SteamDeckGui(Node):
         for key in self.camera_enabled:
             self.camera_enabled[key] = not self.camera_enabled[key]
         self.log("Toggled camera feed on/off")
+
+    def _toggle_rgb_camera(self):
+        self.active_rgb_camera = 'drone' if self.active_rgb_camera == 'husky' else 'husky'
+        label = f"View: {self.active_rgb_camera.capitalize()} RGB"
+        self.cam_toggle_btn.config(text=label)
+        self.log(f"Switched to {self.active_rgb_camera.capitalize()} RGB camera view")
+
 
     # ---------------- TELEOP / CONTROL ----------------
     def toggle_mode(self):
