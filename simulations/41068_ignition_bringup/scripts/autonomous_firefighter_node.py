@@ -14,9 +14,9 @@ This node implements a state machine that:
 States:
 - IDLE: Waiting for fires to be detected
 - PLANNING: Sorting and prioritizing fires
-- NAVIGATING: Moving to next fire location (Nav2 handles approach)
+- NAVIGATING: Moving to next fire location
+- APPROACHING: Fine positioning to 1.5m from fire
 - EXTINGUISHING: Applying extinguishing action
-- BACKING_UP: Recovery maneuver (if enabled)
 - COMPLETED: All known fires extinguished
 
 Usage:
@@ -27,9 +27,7 @@ import rclpy
 from rclpy.node import Node
 from rclpy.action import ActionClient
 from nav2_msgs.action import NavigateToPose
-from nav2_msgs.srv import ClearEntireCostmap
-from std_srvs.srv import Empty
-from geometry_msgs.msg import PoseArray, Pose, PoseStamped, Point, Twist
+from geometry_msgs.msg import PoseArray, Pose, PoseStamped, Point
 from nav_msgs.msg import Odometry
 from std_msgs.msg import Header, ColorRGBA
 from visualization_msgs.msg import Marker, MarkerArray
@@ -46,9 +44,9 @@ class FirefighterState(Enum):
     IDLE = 0              # Waiting for fires
     PLANNING = 1          # Sorting/prioritizing fires
     NAVIGATING = 2        # Moving to fire location
-    EXTINGUISHING = 3     # Extinguishing fire (APPROACHING removed - trust Nav2)
-    COMPLETED = 4         # All fires handled
-    BACKING_UP = 5        # Recovery: backing up to clear obstacles
+    APPROACHING = 3       # Fine positioning to target distance
+    EXTINGUISHING = 4     # Extinguishing fire
+    COMPLETED = 5         # All fires handled
 
 
 class AutonomousFirefighter(Node):
@@ -65,8 +63,6 @@ class AutonomousFirefighter(Node):
         self.declare_parameter('stuck_velocity_threshold', 0.05)  # Velocity threshold for stuck detection (m/s)
         self.declare_parameter('fallback_distance', 2.5)  # Distance to fire to consider "close enough" (meters)
         self.declare_parameter('fire_match_tolerance', 1.0)  # Distance tolerance for matching fire positions (meters)
-        self.declare_parameter('enable_multi_angle_approach', False)  # Enable trying multiple approach angles
-        self.declare_parameter('enable_backup_recovery', False)  # Enable backup recovery maneuver
         self.last_skip_time = 0.0  # Cooldown for skipping fires
         self.skip_cooldown = 2.0  # Seconds to wait after skipping a fire
 
@@ -80,8 +76,6 @@ class AutonomousFirefighter(Node):
         self.stuck_velocity_threshold = self.get_parameter('stuck_velocity_threshold').value
         self.fallback_distance = self.get_parameter('fallback_distance').value
         self.fire_match_tolerance = self.get_parameter('fire_match_tolerance').value
-        self.enable_multi_angle_approach = self.get_parameter('enable_multi_angle_approach').value
-        self.enable_backup_recovery = self.get_parameter('enable_backup_recovery').value
 
         # State machine
         self.state = FirefighterState.IDLE
@@ -92,10 +86,6 @@ class AutonomousFirefighter(Node):
         self.extinguished_fires = []  # List of extinguished fire positions
         self.current_target_fire = None
         self.fire_queue = []  # Ordered list of fires to visit
-        self.approach_attempts = 0  # Track approach angle attempts
-        self.max_approach_attempts = 8  # Try 8 different angles around fire
-        self.backup_attempts = 0  # Track backup recovery attempts
-        self.max_backup_attempts = 2  # Try backing up twice before giving up
 
         # Fire entity tracking (name -> position mapping)
         self.fire_entities = {}  # {name: (x, y, z)}
@@ -149,13 +139,6 @@ class AutonomousFirefighter(Node):
             10
         )
 
-        # cmd_vel publisher for backup recovery (only used if enable_backup_recovery=True)
-        self.cmd_vel_pub = self.create_publisher(
-            Twist,
-            '/husky/cmd_vel',
-            10
-        )
-
         # State machine timer
         self.state_machine_timer = self.create_timer(0.1, self.state_machine_update)
         self.status_timer = self.create_timer(2.0, self.publish_status)
@@ -164,8 +147,6 @@ class AutonomousFirefighter(Node):
         self.get_logger().info(f'Target distance: {self.target_distance}m')
         self.get_logger().info(f'Extinguish duration: {self.extinguish_duration}s')
         self.get_logger().info(f'Auto-start: {self.auto_start}')
-        self.get_logger().info(f'Multi-angle approach: {self.enable_multi_angle_approach}')
-        self.get_logger().info(f'Backup recovery: {self.enable_backup_recovery}')
         
         # Scan world for fire entities
         self.scan_world_for_fires()
@@ -470,9 +451,9 @@ class AutonomousFirefighter(Node):
             # Reset stuck detection on state transitions
             self.stuck_start_time = None
             
-            # Clear navigation state when leaving navigation state
-            if self.previous_state == FirefighterState.NAVIGATING:
-                if new_state != FirefighterState.NAVIGATING:
+            # Clear navigation state when leaving navigation states
+            if self.previous_state in [FirefighterState.NAVIGATING, FirefighterState.APPROACHING]:
+                if new_state not in [FirefighterState.NAVIGATING, FirefighterState.APPROACHING]:
                     self.navigation_result = None
 
             self.get_logger().info(f'STATE TRANSITION: {self.previous_state.name} -> {self.state.name}')
@@ -489,12 +470,12 @@ class AutonomousFirefighter(Node):
             self.handle_planning_state()
         elif self.state == FirefighterState.NAVIGATING:
             self.handle_navigating_state()
+        elif self.state == FirefighterState.APPROACHING:
+            self.handle_approaching_state()
         elif self.state == FirefighterState.EXTINGUISHING:
             self.handle_extinguishing_state()
         elif self.state == FirefighterState.COMPLETED:
             self.handle_completed_state()
-        elif self.state == FirefighterState.BACKING_UP:
-            self.handle_backing_up_state()
 
     def handle_idle_state(self):
         """IDLE state: Wait for fires to appear"""
@@ -539,8 +520,6 @@ class AutonomousFirefighter(Node):
         # Select first fire and navigate
         if len(self.fire_queue) > 0:
             self.current_target_fire = self.fire_queue.pop(0)
-            self.approach_attempts = 0  # Reset approach attempts for new fire
-            self.backup_attempts = 0  # Reset backup attempts for new fire
             self.transition_to_state(FirefighterState.NAVIGATING)
 
 
@@ -585,77 +564,59 @@ class AutonomousFirefighter(Node):
         # Check navigation status - only if result is set
         if self.navigation_result is not None:
             if self.navigation_result:
-                # Trust Nav2's goal checker - go directly to EXTINGUISHING
-                dist_to_fire = math.sqrt(
-                    (self.current_target_fire.position.x - self.robot_position.x)**2 +
-                    (self.current_target_fire.position.y - self.robot_position.y)**2
-                )
-                self.get_logger().info(
-                    f'Navigation successful! Distance to fire: {dist_to_fire:.2f}m. Starting extinguish!'
-                )
-                self.approach_attempts = 0  # Reset for next fire
-                self.backup_attempts = 0  # Reset backup attempts
-                self.transition_to_state(FirefighterState.EXTINGUISHING)
+                self.get_logger().info('Navigation successful! Transitioning to APPROACHING.')
+                self.transition_to_state(FirefighterState.APPROACHING)
             else:
-                # Navigation failed - try alternative approach angle if enabled
-                if self.enable_multi_angle_approach:
-                    self.approach_attempts += 1
-                    if self.approach_attempts < self.max_approach_attempts:
-                        self.get_logger().warn(
-                            f'Navigation failed! Trying alternative approach angle '
-                            f'({self.approach_attempts}/{self.max_approach_attempts})'
-                        )
-                        # Reset navigation state and try again
-                        self.current_goal_handle = None
-                        self.navigation_result = None
-                        return  # Will retry on next update
-
-                # Multi-angle disabled or all angles exhausted - try backup or skip
-                should_try_backup = False
-                skip_reason = ""
-
-                if self.enable_multi_angle_approach and self.approach_attempts >= self.max_approach_attempts:
-                    # All angles tried
-                    should_try_backup = True
-                    skip_reason = f'All {self.max_approach_attempts} approach angles'
-                elif not self.enable_multi_angle_approach:
-                    # Multi-angle disabled, first failure
-                    should_try_backup = True
-                    skip_reason = 'Navigation'
-
-                if should_try_backup:
-                    # Try backing up if enabled
-                    if self.enable_backup_recovery and self.backup_attempts < self.max_backup_attempts:
-                        self.get_logger().warn(
-                            f'{skip_reason} failed! '
-                            f'Attempting backup recovery ({self.backup_attempts + 1}/{self.max_backup_attempts})...'
-                        )
-                        self.approach_attempts = 0  # Reset for retry after backup
-                        self.transition_to_state(FirefighterState.BACKING_UP)
-                    else:
-                        # Skip this fire
-                        if self.enable_backup_recovery:
-                            self.get_logger().warn(
-                                f'{skip_reason} and {self.max_backup_attempts} backup attempts failed! '
-                                f'Skipping this fire.'
-                            )
-                        elif self.enable_multi_angle_approach:
-                            self.get_logger().warn(
-                                f'{skip_reason} failed! (Backup recovery disabled) Skipping this fire.'
-                            )
-                        else:
-                            self.get_logger().warn(
-                                f'{skip_reason} failed! (Multi-angle and backup disabled) Skipping this fire.'
-                            )
-                        self.last_skip_time = time.time()
-                        self.current_target_fire = None
-                        self.approach_attempts = 0
-                        self.backup_attempts = 0
-                        self.transition_to_state(FirefighterState.PLANNING)
+                self.get_logger().warn('Navigation failed! Skipping this fire.')
+                self.last_skip_time = time.time()
+                self.current_target_fire = None
+                self.transition_to_state(FirefighterState.PLANNING)
 
             # Reset for next goal
             self.current_goal_handle = None
             self.navigation_result = None
+
+    def handle_approaching_state(self):
+        """APPROACHING state: Fine positioning"""
+        if self.current_target_fire is None:
+            self.transition_to_state(FirefighterState.PLANNING)
+            return
+
+        # Check if stuck but close enough to fire
+        stuck_check = self.check_stuck_near_fire()
+        if stuck_check == True:
+            # Close enough to proceed
+            self.get_logger().info('Stuck detection: Close enough to fire, proceeding to extinguish!')
+            self.transition_to_state(FirefighterState.EXTINGUISHING)
+            return
+        elif stuck_check == 'skip_fire':
+            # Too far, skip this fire and try next
+            self.get_logger().warn('Skipping unreachable fire, moving to next target.')
+            self.current_target_fire = None
+            self.transition_to_state(FirefighterState.PLANNING)
+            return
+
+        # Calculate distance to fire
+        dist = math.sqrt(
+            (self.current_target_fire.position.x - self.robot_position.x)**2 +
+            (self.current_target_fire.position.y - self.robot_position.y)**2
+        )
+
+        # Check if within target distance
+        distance_error = abs(dist - self.target_distance)
+
+        if distance_error < self.distance_tolerance:
+            self.get_logger().info(f'Positioned at {dist:.2f}m from fire. Starting extinguish!')
+            self.transition_to_state(FirefighterState.EXTINGUISHING)
+        elif dist > self.target_distance + 0.5:
+            # Too far, navigate closer
+            self.get_logger().info(f'Too far ({dist:.2f}m). Re-navigating...')
+            self.navigation_result = None
+            self.transition_to_state(FirefighterState.NAVIGATING)
+        else:
+            # Close enough, proceed to extinguish
+            self.get_logger().info(f'Close enough ({dist:.2f}m). Starting extinguish!')
+            self.transition_to_state(FirefighterState.EXTINGUISHING)
 
     def handle_extinguishing_state(self):
         """EXTINGUISHING state: Apply extinguishing action"""
@@ -689,25 +650,6 @@ class AutonomousFirefighter(Node):
             fire_name = self.find_fire_entity_name(self.current_target_fire.position)
             if fire_name:
                 self.delete_fire_entity(fire_name)
-
-                # Move robot slightly to force costmap update with new laser scans
-                self.get_logger().info('Moving to refresh costmap (fire deleted)...')
-                refresh_cmd = Twist()
-                refresh_cmd.linear.x = -0.15  # Small backward movement
-                refresh_cmd.angular.z = 0.0
-
-                # Publish movement for 0.5 seconds
-                for _ in range(5):
-                    self.cmd_vel_pub.publish(refresh_cmd)
-                    time.sleep(0.1)
-
-                # Stop
-                stop_cmd = Twist()
-                self.cmd_vel_pub.publish(stop_cmd)
-
-                # Give costmap a moment to process the new scans
-                time.sleep(0.5)
-                self.get_logger().info('Costmap refreshed')
             else:
                 self.get_logger().warn('Could not find fire entity name to delete')
 
@@ -738,43 +680,8 @@ class AutonomousFirefighter(Node):
                 # Still completed, reset timer
                 self.state_start_time = time.time()
 
-    def handle_backing_up_state(self):
-        """BACKING_UP state: Recovery maneuver to clear obstacles"""
-        time_in_state = time.time() - self.state_start_time
-        backup_duration = 2.0  # Back up for 2 seconds
-
-        if time_in_state < backup_duration:
-            # Publish backup velocity command
-            cmd = Twist()
-            cmd.linear.x = -0.3  # Reverse at 0.3 m/s
-            cmd.angular.z = 0.0
-            self.cmd_vel_pub.publish(cmd)
-
-            if time_in_state < 0.5:  # Log only once at start
-                self.get_logger().info('Executing backup maneuver to clear obstacles...')
-        else:
-            # Stop the robot
-            cmd = Twist()
-            cmd.linear.x = 0.0
-            cmd.angular.z = 0.0
-            self.cmd_vel_pub.publish(cmd)
-
-            # Increment backup counter
-            self.backup_attempts += 1
-
-            self.get_logger().info(
-                f'Backup complete. Retrying navigation (backup attempt {self.backup_attempts}/{self.max_backup_attempts})...'
-            )
-
-            # Return to navigating state to retry
-            self.transition_to_state(FirefighterState.NAVIGATING)
-
     def calculate_approach_pose(self, fire_pose):
-        """Calculate position to approach fire from (at target distance)
-
-        Uses approach_attempts to try different angles around the fire
-        if previous attempts failed.
-        """
+        """Calculate position to approach fire from (at target distance)"""
         # Calculate direction from robot to fire
         dx = fire_pose.position.x - self.robot_position.x
         dy = fire_pose.position.y - self.robot_position.y
@@ -783,22 +690,13 @@ class AutonomousFirefighter(Node):
         if dist < 0.01:
             dist = 0.01  # Avoid division by zero
 
-        # Base angle from robot to fire
-        base_angle = math.atan2(dy, dx)
+        # Unit vector towards fire
+        ux = dx / dist
+        uy = dy / dist
 
-        # Calculate approach angle based on multi-angle setting
-        if self.enable_multi_angle_approach:
-            # Add offset based on attempt number to try different approach angles
-            # Spread attempts around the fire at 45-degree intervals
-            angle_offset = (self.approach_attempts * 2 * math.pi / self.max_approach_attempts)
-            approach_angle = base_angle + math.pi + angle_offset  # Start from opposite side
-        else:
-            # Direct approach from current position
-            approach_angle = base_angle + math.pi
-
-        # Position at target_distance from fire at the calculated angle
-        approach_x = fire_pose.position.x + math.cos(approach_angle) * self.target_distance
-        approach_y = fire_pose.position.y + math.sin(approach_angle) * self.target_distance
+        # Position at target_distance from fire
+        approach_x = fire_pose.position.x - ux * self.target_distance
+        approach_y = fire_pose.position.y - uy * self.target_distance
 
         # Create approach pose facing the fire
         approach_pose = PoseStamped()
@@ -808,21 +706,10 @@ class AutonomousFirefighter(Node):
         approach_pose.pose.position.y = approach_y
         approach_pose.pose.position.z = 0.0
 
-        # Orientation should face the fire
-        yaw_to_fire = math.atan2(
-            fire_pose.position.y - approach_y,
-            fire_pose.position.x - approach_x
-        )
-
-        approach_pose.pose.orientation.z = math.sin(yaw_to_fire / 2.0)
-        approach_pose.pose.orientation.w = math.cos(yaw_to_fire / 2.0)
-
-        # Log alternative angle attempts only if multi-angle is enabled
-        if self.enable_multi_angle_approach and self.approach_attempts > 0:
-            self.get_logger().info(
-                f'Trying alternative approach angle {self.approach_attempts + 1}/{self.max_approach_attempts} '
-                f'at ({approach_x:.2f}, {approach_y:.2f})'
-            )
+        # Orientation towards fire
+        yaw = math.atan2(dy, dx)
+        approach_pose.pose.orientation.z = math.sin(yaw / 2.0)
+        approach_pose.pose.orientation.w = math.cos(yaw / 2.0)
 
         return approach_pose
 
@@ -846,33 +733,12 @@ class AutonomousFirefighter(Node):
         return True
 
     def goal_response_callback(self, future):
-        """Handle goal acceptance/rejection"""
-        # Only process if we're still in NAVIGATING state
-        if self.state != FirefighterState.NAVIGATING:
-            self.get_logger().info('Ignoring stale navigation response from previous goal')
-            return
-
-        goal_handle = future.result()
-
-        if not goal_handle.accepted:
-            self.get_logger().warn('Navigation goal was REJECTED by Nav2!')
-            self.navigation_result = False
-            return
-
-        self.get_logger().info('Navigation goal ACCEPTED, waiting for result...')
-        self.current_goal_handle = goal_handle
-
-        # Now wait for the actual result
-        result_future = goal_handle.get_result_async()
-        result_future.add_done_callback(self.goal_result_callback)
-
-    def goal_result_callback(self, future):
-        """Handle navigation completion"""
-        # Only process if we're still in NAVIGATING state
-        if self.state != FirefighterState.NAVIGATING:
+        """Handle goal completion"""
+        # Only process if we're still in a navigation-related state
+        if self.state not in [FirefighterState.NAVIGATING, FirefighterState.APPROACHING]:
             self.get_logger().info('Ignoring stale navigation result from previous goal')
             return
-
+        
         result = future.result()
         self.navigation_result = (result.status == 4)  # 4 = SUCCEEDED
 
@@ -880,6 +746,16 @@ class AutonomousFirefighter(Node):
             self.get_logger().info('Navigation goal reached!')
         else:
             self.get_logger().warn(f'Navigation goal failed with status: {result.status}')
+
+    def goal_result_callback(self, future):
+        """Handle goal completion"""
+        result = future.result()
+        self.navigation_result = (result.status == 4)  # 4 = SUCCEEDED
+
+        if self.navigation_result:
+            self.get_logger().info('Navigation goal reached!')
+        else:
+            self.get_logger().warn(f'Navigation failed with status: {result.status}')
 
     def publish_extinguish_effect(self):
         """Publish particle effect for extinguishing"""
