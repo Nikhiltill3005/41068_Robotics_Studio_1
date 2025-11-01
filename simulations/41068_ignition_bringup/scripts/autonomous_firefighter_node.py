@@ -66,7 +66,7 @@ class AutonomousFirefighter(Node):
         self.declare_parameter('fallback_distance', 2.5)  # Distance to fire to consider "close enough" (meters)
         self.declare_parameter('fire_match_tolerance', 1.0)  # Distance tolerance for matching fire positions (meters)
         self.declare_parameter('enable_multi_angle_approach', False)  # Enable trying multiple approach angles
-        self.declare_parameter('enable_backup_recovery', False)  # Enable backup recovery maneuver
+        self.declare_parameter('enable_backup_recovery', True)  # Enable backup recovery maneuver
         self.last_skip_time = 0.0  # Cooldown for skipping fires
         self.skip_cooldown = 2.0  # Seconds to wait after skipping a fire
 
@@ -180,7 +180,7 @@ class AutonomousFirefighter(Node):
             # Call ign service to get scene info
             cmd = [
                 'ign', 'service',
-                '-s', '/world/bushland_world/scene/info',
+                '-s', '/world/bushland_world_spaced/scene/info',
                 '--reqtype', 'ignition.msgs.Empty',
                 '--reptype', 'ignition.msgs.Scene',
                 '--timeout', '5000',
@@ -329,7 +329,7 @@ class AutonomousFirefighter(Node):
             # Call ign service to remove the entity
             cmd = [
                 'ign', 'service',
-                '-s', '/world/bushland_world/remove',
+                '-s', '/world/bushland_world_spaced/remove',
                 '--reqtype', 'ignition.msgs.Entity',
                 '--reptype', 'ignition.msgs.Boolean',
                 '--req', f'name: "{fire_name}" type: 2',
@@ -384,6 +384,11 @@ class AutonomousFirefighter(Node):
             if self.auto_start:
                 self.get_logger().info('Fires detected! Starting firefighting operations.')
                 self.transition_to_state(FirefighterState.PLANNING)
+        
+        # If we're COMPLETED and new fires detected, resume operations immediately
+        elif self.state == FirefighterState.COMPLETED and len(self.detected_fires) > 0:
+            self.get_logger().info('New fire(s) detected while COMPLETED! Resuming operations immediately.')
+            self.transition_to_state(FirefighterState.PLANNING)
 
     def odom_callback(self, msg):
         """Update robot position and velocity"""
@@ -445,13 +450,22 @@ class AutonomousFirefighter(Node):
                     self.stuck_start_time = None
                     return True
                 else:
-                    self.get_logger().warn(
-                        f'Stuck and too far! Distance: {dist_to_fire:.2f}m, '
-                        f'threshold: {self.fallback_distance}m. Giving up on this fire.'
-                    )
-                    self.stuck_start_time = None
-                    # Return special code to skip this fire
-                    return 'skip_fire'
+                    # Robot is stuck and too far - try backup recovery if enabled
+                    if self.enable_backup_recovery and self.backup_attempts < self.max_backup_attempts:
+                        self.get_logger().warn(
+                            f'Stuck at distance {dist_to_fire:.2f}m from fire! '
+                            f'Attempting backup recovery ({self.backup_attempts + 1}/{self.max_backup_attempts})...'
+                        )
+                        self.stuck_start_time = None
+                        return 'trigger_backup'
+                    else:
+                        # No backup recovery available or exhausted
+                        self.get_logger().warn(
+                            f'Stuck and too far! Distance: {dist_to_fire:.2f}m, '
+                            f'threshold: {self.fallback_distance}m. Giving up on this fire.'
+                        )
+                        self.stuck_start_time = None
+                        return 'skip_fire'
         else:
             # Robot is moving, reset stuck timer
             if self.stuck_start_time is not None:
@@ -561,6 +575,15 @@ class AutonomousFirefighter(Node):
                 self.current_goal_handle = None
             self.navigation_result = None
             self.transition_to_state(FirefighterState.EXTINGUISHING)
+            return
+        elif stuck_check == 'trigger_backup':
+            # Stuck and far - try backup recovery
+            # Cancel current goal if active
+            if self.current_goal_handle is not None:
+                self.current_goal_handle.cancel_goal_async()
+                self.current_goal_handle = None
+            self.navigation_result = None
+            self.transition_to_state(FirefighterState.BACKING_UP)
             return
         elif stuck_check == 'skip_fire':
             # Too far, skip this fire and try next
@@ -718,7 +741,7 @@ class AutonomousFirefighter(Node):
             # Check if more fires to handle
             if len(self.fire_queue) > 0:
                 self.transition_to_state(FirefighterState.PLANNING)
-            elif len(self.detected_fires) > len(self.extinguished_fires):
+            elif len(self.detected_fires) > 0:
                 # New fires detected, replan
                 self.transition_to_state(FirefighterState.PLANNING)
             else:
@@ -730,8 +753,7 @@ class AutonomousFirefighter(Node):
         time_in_state = time.time() - self.state_start_time
 
         if time_in_state > 5.0:  # Check every 5 seconds
-            unhandled_fires = len(self.detected_fires) - len(self.extinguished_fires)
-            if unhandled_fires > 0:
+            if len(self.detected_fires) > 0:
                 self.get_logger().info(f'New fire(s) detected! Resuming operations.')
                 self.transition_to_state(FirefighterState.PLANNING)
             else:
@@ -741,12 +763,12 @@ class AutonomousFirefighter(Node):
     def handle_backing_up_state(self):
         """BACKING_UP state: Recovery maneuver to clear obstacles"""
         time_in_state = time.time() - self.state_start_time
-        backup_duration = 2.0  # Back up for 2 seconds
+        backup_duration = 5.0  # Back up for 5 seconds (aggressive)
 
         if time_in_state < backup_duration:
             # Publish backup velocity command
             cmd = Twist()
-            cmd.linear.x = -0.3  # Reverse at 0.3 m/s
+            cmd.linear.x = -0.8  # Reverse at 0.8 m/s = 4m in 5 seconds (AGGRESSIVE!)
             cmd.angular.z = 0.0
             self.cmd_vel_pub.publish(cmd)
 

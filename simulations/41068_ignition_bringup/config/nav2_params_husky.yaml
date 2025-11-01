@@ -14,8 +14,8 @@ amcl:
     global_frame_id: "map"
     lambda_short: 0.1
     laser_likelihood_max_dist: 2.0
-    laser_max_range: 100.0
-    laser_min_range: -1.0
+    laser_max_range: 25.0
+    laser_min_range: 1.2
     laser_model_type: "likelihood_field"
     max_beams: 60
     max_particles: 2000
@@ -138,32 +138,32 @@ controller_server:
       plugin: "nav2_controller::SimpleGoalChecker"
       xy_goal_tolerance: 0.7
       yaw_goal_tolerance: 0.5
-    # DWB parameters - Optimized for tank steering and smooth navigation
+    # DWB parameters - TANK STEERING: rotate in place, then drive straight
     FollowPath:
       plugin: "dwb_core::DWBLocalPlanner"
       debug_trajectory_details: False
-      min_vel_x: -0.1
+      min_vel_x: 0.0
       min_vel_y: 0.0
       max_vel_x: 1.2
       max_vel_y: 0.0
-      max_vel_theta: 20.0
+      max_vel_theta: 12.0
       min_speed_xy: 0.0
       max_speed_xy: 1.2
-      min_speed_theta: 0.0
-      # Extremely aggressive acceleration for sharp steering
-      acc_lim_x: 2.0
+      min_speed_theta: 0.4
+      # VERY aggressive acceleration for sharp steering
+      acc_lim_x: 2.5
       acc_lim_y: 0.0
-      acc_lim_theta: 50.0
-      decel_lim_x: -5.0
+      acc_lim_theta: 25.0
+      decel_lim_x: -2.5
       decel_lim_y: 0.0
-      decel_lim_theta: -50.0
-      # Optimized trajectory samples for aggressive tank steering with in-place turning
-      vx_samples: 25
+      decel_lim_theta: -25.0
+      # Tank steering trajectory samples: prefer pure rotation + straight driving
+      vx_samples: 20
       vy_samples: 1
-      vtheta_samples: 80
-      # Shorter simulation time for aggressive, reactive steering
+      vtheta_samples: 40
+      # Shorter simulation time for reactive tank steering
       sim_time: 1.2
-      linear_granularity: 0.02
+      linear_granularity: 0.05
       angular_granularity: 0.025
       transform_tolerance: 0.2
       xy_goal_tolerance: 0.7
@@ -171,27 +171,29 @@ controller_server:
       trans_stopped_velocity: 0.05
       short_circuit_trajectory_evaluation: False
       stateful: True
-      # Force DWB to always return SOME trajectory even if not great
+      # Tank steering: rotate to align, then drive
       prune_plan: true
-      prune_distance: 2.0
+      prune_distance: 1.5
       shorten_transformed_plan: true
-      forward_prune_distance: 2.0
-      # Optimized critics for aggressive steering and obstacle avoidance
+      forward_prune_distance: 1.5
+      # TANK STEERING critics: heavily favor rotation-then-drive
       critics: ["RotateToGoal", "Oscillation", "BaseObstacle", "GoalAlign", "PathAlign", "PathDist", "GoalDist"]
-      # VERY low obstacle penalty - robot will get close to obstacles to find paths
-      BaseObstacle.scale: 0.01
+      # Very high obstacle penalty - avoid rocks!
+      BaseObstacle.scale: 0.3
       BaseObstacle.sum_scores: false
-      PathAlign.scale: 20.0
-      PathAlign.forward_point_distance: 0.4
-      GoalAlign.scale: 25.0
-      GoalAlign.forward_point_distance: 0.4
-      PathDist.scale: 20.0
-      GoalDist.scale: 30.0
-      RotateToGoal.scale: 40.0
+      # Heavy penalties for misalignment - forces tank steering
+      PathAlign.scale: 50.0
+      PathAlign.forward_point_distance: 0.3
+      GoalAlign.scale: 60.0
+      GoalAlign.forward_point_distance: 0.3
+      PathDist.scale: 15.0
+      GoalDist.scale: 25.0
+      # VERY HIGH rotate-to-goal priority - rotate in place first!
+      RotateToGoal.scale: 100.0
       RotateToGoal.xy_goal_tolerance: 0.7
-      RotateToGoal.slowing_factor: 1.5
+      RotateToGoal.slowing_factor: 2.0
       RotateToGoal.lookahead_time: -1.0
-      Oscillation.scale: 0.5
+      Oscillation.scale: 1.0
 
 local_costmap:
   local_costmap:
@@ -202,18 +204,18 @@ local_costmap:
       robot_base_frame: base_link
       use_sim_time: True
       rolling_window: true
-      width: 100
-      height: 100
+      width: 20
+      height: 20
       resolution: 0.025
-      # Conservative Husky footprint: 0.99m x 0.57m + extra safety margin for forest navigation
-      footprint: "[ [0.8125, 0.5625], [0.8125, -0.5625], [-0.8125, -0.5625], [-0.8125, 0.5625] ]"
+      # Moderate safety footprint: 1.20m x 0.81m (10% larger - balanced safety)
+      footprint: "[ [0.600, 0.407], [0.600, -0.407], [-0.600, -0.407], [-0.600, 0.407] ]"
       # Add transform tolerance to handle timing issues
       transform_tolerance: 0.5
       plugins: ["obstacle_layer", "inflation_layer"]
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
-        cost_scaling_factor: 6.0
-        inflation_radius: 1.2
+        cost_scaling_factor: 5.0
+        inflation_radius: 0.75
       obstacle_layer:
         plugin: "nav2_costmap_2d::ObstacleLayer"
         enabled: True
@@ -224,10 +226,10 @@ local_costmap:
           clearing: True
           marking: True
           data_type: "LaserScan"
-          raytrace_max_range: 30.0
-          raytrace_min_range: 0.02
-          obstacle_max_range: 15.0
-          obstacle_min_range: 0.02
+          raytrace_max_range: 35.0
+          raytrace_min_range: 0.22
+          obstacle_max_range: 20.0
+          obstacle_min_range: 0.22
           # sensor_frame specifies the tf frame in which the data is published.
           # You can set it to the frame_id from your LaserScan message, for example:
           # - "base_laser" (common default for 2D lidar)
@@ -252,14 +254,14 @@ global_costmap:
       global_frame: map
       robot_base_frame: base_link
       use_sim_time: True
-      # Conservative Husky footprint: 0.99m x 0.57m + extra safety margin for forest navigation
-      footprint: "[ [0.8125, 0.5625], [0.8125, -0.5625], [-0.8125, -0.5625], [-0.8125, 0.5625] ]"
-      # Use slightly coarser resolution to reduce memory usage and improve bounds handling
-      resolution: 0.05
+      # Moderate safety footprint: 1.20m x 0.81m (10% larger - balanced safety)
+      footprint: "[ [0.600, 0.407], [0.600, -0.407], [-0.600, -0.407], [-0.600, 0.407] ]"
+      # Match SLAM resolution (0.04) for consistent planning
+      resolution: 0.04
       track_unknown_space: true
-      # Set initial map size and allow dynamic expansion
-      width: 1000
-      height: 1000
+      # Map for 50x50 world, covering [-25,25] x [-25,25]
+      width: 1250
+      height: 1250
       origin_x: -25.0
       origin_y: -25.0
       rolling_window: false
@@ -280,10 +282,10 @@ global_costmap:
           clearing: True
           marking: True
           data_type: "LaserScan"
-          raytrace_max_range: 30.0
-          raytrace_min_range: 0.02
-          obstacle_max_range: 15.0
-          obstacle_min_range: 0.02
+          raytrace_max_range: 35.0
+          raytrace_min_range: 0.22
+          obstacle_max_range: 20.0
+          obstacle_min_range: 0.22
           # Consistent sensor frame for proper transforms
           sensor_frame: "base_scan"
           # More sensitive detection for close obstacles
@@ -291,8 +293,8 @@ global_costmap:
           marking_threshold: 0
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
-        cost_scaling_factor: 6.0
-        inflation_radius: 1.2
+        cost_scaling_factor: 5.0
+        inflation_radius: 0.75
       always_send_full_costmap: True
 
 map_server:
@@ -317,10 +319,11 @@ planner_server:
     planner_plugins: ["GridBased"]
     GridBased:
       plugin: "nav2_navfn_planner/NavfnPlanner"
-      tolerance: 1.5
+      tolerance: 8.0
       use_astar: false
       allow_unknown: true
       use_final_approach_orientation: false
+      cost_factor: 3.0
 
 smoother_server:
   ros__parameters:
@@ -342,6 +345,9 @@ behavior_server:
       plugin: "nav2_behaviors/Spin"
     backup:
       plugin: "nav2_behaviors/BackUp"
+      backup_dist: 4.0
+      backup_speed: 0.8
+      time_allowance: 10.0
     drive_on_heading:
       plugin: "nav2_behaviors/DriveOnHeading"
     wait:
@@ -353,9 +359,11 @@ behavior_server:
     transform_tolerance: 0.5
     use_sim_time: true
     simulate_ahead_time: 2.0
-    max_rotational_vel: 1.0
-    min_rotational_vel: 0.4
-    rotational_acc_lim: 3.2
+    max_rotational_vel: 2.0
+    min_rotational_vel: 0.6
+    rotational_acc_lim: 5.0
+    # Recovery behavior settings
+    enable_stamped_cmd_vel: false
 
 robot_state_publisher:
   ros__parameters:
@@ -378,34 +386,10 @@ velocity_smoother:
     smoothing_frequency: 20.0
     scale_velocities: False
     feedback: "OPEN_LOOP"
-    max_velocity: [1.2, 0.0, 8.0]
-    min_velocity: [0.0, 0.0, -8.0]
-
-robot_state_publisher:
-  ros__parameters:
-    use_sim_time: True
-
-waypoint_follower:
-  ros__parameters:
-    use_sim_time: True
-    loop_rate: 20
-    stop_on_failure: false
-    waypoint_task_executor_plugin: "wait_at_waypoint"
-    wait_at_waypoint:
-      plugin: "nav2_waypoint_follower::WaitAtWaypoint"
-      enabled: True
-      waypoint_pause_duration: 200
-
-velocity_smoother:
-  ros__parameters:
-    use_sim_time: True
-    smoothing_frequency: 20.0
-    scale_velocities: False
-    feedback: "OPEN_LOOP"
-    max_velocity: [1.2, 0.0, 8.0]
-    min_velocity: [0.0, 0.0, -8.0]
-    max_accel: [1.0, 0.0, 18.0]
-    max_decel: [-1.0, 0.0, -18.0]
+    max_velocity: [1.2, 0.0, 12.0]
+    min_velocity: [0.0, 0.0, -12.0]
+    max_accel: [2.5, 0.0, 25.0]
+    max_decel: [-2.5, 0.0, -25.0]
     odom_topic: "/husky/odometry"
     odom_duration: 0.1
     deadband_velocity: [0.0, 0.0, 0.0]

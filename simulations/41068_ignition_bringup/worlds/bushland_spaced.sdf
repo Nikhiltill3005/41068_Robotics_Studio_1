@@ -1,0 +1,734 @@
+<?xml version="1.0"?>
+<sdf version='1.8'>
+  <world name="bushland_world_spaced">
+    <plugin filename="ignition-gazebo-thermal-system" name="ignition::gazebo::systems::Thermal">
+      <temperature>293.15</temperature>
+    </plugin>
+    <!-- Basic world setup for Gazebo Ignition -->
+    <plugin name='ignition::gazebo::systems::Physics' filename='ignition-gazebo-physics-system' />
+    <plugin name='ignition::gazebo::systems::UserCommands' filename='ignition-gazebo-user-commands-system' />
+    <plugin name='ignition::gazebo::systems::SceneBroadcaster' filename='ignition-gazebo-scene-broadcaster-system' />
+    <plugin name='ignition::gazebo::systems::Contact' filename='ignition-gazebo-contact-system' />
+    <plugin name='ignition::gazebo::systems::Sensors' filename='libignition-gazebo-sensors-system.so' />
+    <!-- Sun light -->
+    <light name="sun" type="directional">
+      <cast_shadows>1</cast_shadows>
+      <pose>0 0 10 0 -0 0</pose>
+      <diffuse>0.8 0.8 0.8 1</diffuse>
+      <specular>0.2 0.2 0.2 1</specular>
+      <attenuation>
+        <range>1000</range>
+        <constant>0.9</constant>
+        <linear>0.01</linear>
+        <quadratic>0.001</quadratic>
+      </attenuation>
+      <direction>-0.5 0.1 -0.9</direction>
+    </light>
+    <gravity>0 0 -9.81</gravity>
+    <magnetic_field>6e-06 2.3e-05 -4.2e-05</magnetic_field>
+    <atmosphere type="adiabatic"/>
+    <physics name="default_physics" type="ignored">
+      <max_step_size>0.01</max_step_size>
+      <real_time_factor>1</real_time_factor>
+      <real_time_update_rate>100</real_time_update_rate>
+    </physics>
+    <scene>
+      <ambient>1.0 1.0 1.0</ambient>
+      <background>0.8 0.8 0.8</background>
+      <shadows>1</shadows>
+    </scene>
+
+    <!-- Spherical coordinates -->
+    <spherical_coordinates>
+      <latitude_deg>0.0</latitude_deg>
+      <longitude_deg>0.0</longitude_deg>
+      <elevation>10.0</elevation>
+      <heading_deg>0</heading_deg>
+      <surface_model>EARTH_WGS84</surface_model>
+    </spherical_coordinates>
+
+    <!-- Large ground planes with forest floor texture -->
+    <include>
+      <uri>model://big_forest_plane</uri>
+      <name>big_forest_plane</name>
+      <pose>0 0 0 0 0 0</pose>
+    </include>
+
+    <!-- RANDOMLY DISPERSED TREES -->
+    <!-- Oak trees scattered around -->
+    <include>
+      <uri>model://low_poly_tree_dark</uri>
+      <name>oak_1</name>
+      <pose>-18.5 -15.2 0 0 0.05 1.23</pose>
+      <static>true</static>
+    </include>
+    <include>
+      <uri>model://low_poly_tree_dark</uri>
+      <name>oak_2</name>
+      <pose>-22.1 8.7 0 0 0.05 2.91</pose>
+      <static>true</static>
+    </include>
+    <include>
+      <uri>model://low_poly_tree_dark</uri>
+      <name>oak_3</name>
+      <pose>3.2 -18.5 0 0 0.05 0.67</pose>
+      <static>true</static>
+    </include>
+    <include>
+      <uri>model://low_poly_tree_dark</uri>
+      <name>oak_4</name>
+      <pose>18.3 -12.4 0 0 0.05 3.01</pose>
+      <static>true</static>
+    </include>
+    <include>
+      <uri>model://low_poly_tree_dark</uri>
+      <name>oak_5</name>
+      <pose>24.2 18.9 0 0 0.05 2.00</pose>
+      <static>true</static>
+    </include>
+    <include>
+      <uri>model://low_poly_tree_dark</uri>
+      <name>oak_6</name>
+      <pose>-16.8 19.4 0 0 0.05 0.85</pose>
+      <static>true</static>
+    </include>
+    <include>
+      <uri>model://low_poly_tree</uri>
+      <name>oak_7</name>
+      <pose>-23.3 -8.2 0 0 0.05 0.55</pose>
+      <static>true</static>
+    </include>
+    <include>
+      <uri>model://low_poly_tree</uri>
+      <name>oak_8</name>
+      <pose>-8.4 3.1 0 0 0.05 3.99</pose>
+      <static>true</static>
+    </include>
+    <include>
+      <uri>model://low_poly_tree</uri>
+      <name>oak_9</name>
+      <pose>5.7 24.8 0 0 0.05 6.18</pose>
+      <static>true</static>
+    </include>
+    <include>
+      <uri>model://low_poly_tree</uri>
+      <name>oak_10</name>
+      <pose>-3.6 -22.1 0 0 0.05 5.15</pose>
+      <static>true</static>
+    </include>
+    <include>
+      <uri>model://low_poly_tree</uri>
+      <name>oak_11</name>
+      <pose>14.2 6.8 0 0 0.05 2.06</pose>
+      <static>true</static>
+    </include>
+    <include>
+      <uri>model://low_poly_tree</uri>
+      <name>oak_12</name>
+      <pose>-19.3 -23.5 0 0 0.05 0.30</pose>
+      <static>true</static>
+    </include>
+    <include>
+      <uri>model://low_poly_tree</uri>
+      <name>oak_13</name>
+      <pose>23.5 -19.2 0 0 0.05 4.78</pose>
+      <static>true</static>
+    </include>
+    <include>
+      <uri>model://low_poly_tree</uri>
+      <name>oak_14</name>
+      <pose>20.1 23.6 0 0 0.05 5.70</pose>
+      <static>true</static>
+    </include>
+    <include>
+      <uri>model://low_poly_tree</uri>
+      <name>oak_15</name>
+      <pose>-23.9 15.2 0 0 0.05 4.99</pose>
+      <static>true</static>
+    </include>
+
+    <!-- Pine trees scattered throughout -->
+    <include>
+      <uri>model://pine_tree</uri>
+      <name>pine_1</name>
+      <pose>-11.3 -19.8 0 0 0.05 5.90</pose>
+      <static>true</static>
+    </include>
+    <include>
+      <uri>model://pine_tree</uri>
+      <name>pine_2</name>
+      <pose>22.4 -6.3 0 0 0.05 3.66</pose>
+      <static>true</static>
+    </include>
+    <include>
+      <uri>model://pine_tree</uri>
+      <name>pine_3</name>
+      <pose>-15.2 -3.8 0 0 0.05 3.95</pose>
+      <static>true</static>
+    </include>
+    <include>
+      <uri>model://pine_tree</uri>
+      <name>pine_4</name>
+      <pose>23.7 12.4 0 0 0.05 1.49</pose>
+      <static>true</static>
+    </include>
+    <include>
+      <uri>model://pine_tree</uri>
+      <name>pine_5</name>
+      <pose>-6.9 11.8 0 0 0.05 2.71</pose>
+      <static>true</static>
+    </include>
+    <include>
+      <uri>model://pine_tree</uri>
+      <name>pine_6</name>
+      <pose>16.2 -24.3 0 0 0.05 3.59</pose>
+      <static>true</static>
+    </include>
+    <include>
+      <uri>model://pine_tree</uri>
+      <name>pine_7</name>
+      <pose>-24.6 21.9 0 0 0.05 0.20</pose>
+      <static>true</static>
+    </include>
+    <include>
+      <uri>model://pine_tree</uri>
+      <name>pine_8</name>
+      <pose>8.5 15.7 0 0 0.05 2.20</pose>
+      <static>true</static>
+    </include>
+    <include>
+      <uri>model://pine_tree</uri>
+      <name>pine_9</name>
+      <pose>-2.8 -8.9 0 0 0.05 3.77</pose>
+      <static>true</static>
+    </include>
+    <include>
+      <uri>model://pine_tree</uri>
+      <name>pine_10</name>
+      <pose>11.6 -5.2 0 0 0.05 4.30</pose>
+      <static>true</static>
+    </include>
+    <include>
+      <uri>model://pine_tree</uri>
+      <name>pine_11</name>
+      <pose>-20.3 -12.6 0 0 0.05 2.25</pose>
+      <static>true</static>
+    </include>
+    <include>
+      <uri>model://pine_tree</uri>
+      <name>pine_12</name>
+      <pose>23.8 5.4 0 0 0.05 4.08</pose>
+      <static>true</static>
+    </include>
+    <include>
+      <uri>model://pine_tree</uri>
+      <name>pine_13</name>
+      <pose>-12.7 24.1 0 0 0.05 6.21</pose>
+      <static>true</static>
+    </include>
+    <include>
+      <uri>model://pine_tree</uri>
+      <name>pine_14</name>
+      <pose>4.1 -14.7 0 0 0.05 0.95</pose>
+      <static>true</static>
+    </include>
+    <include>
+      <uri>model://pine_tree</uri>
+      <name>pine_15</name>
+      <pose>-23.4 -21.3 0 0 0.05 1.27</pose>
+      <static>true</static>
+    </include>
+
+    <!-- Additional 5 trees -->
+    <include>
+      <uri>model://low_poly_tree_dark</uri>
+      <name>oak_16</name>
+      <pose>-10.5 -16.2 0 0 0.05 2.15</pose>
+      <static>true</static>
+    </include>
+    <include>
+      <uri>model://low_poly_tree</uri>
+      <name>oak_17</name>
+      <pose>6.8 -10.5 0 0 0.05 4.32</pose>
+      <static>true</static>
+    </include>
+    <include>
+      <uri>model://pine_tree</uri>
+      <name>pine_16</name>
+      <pose>-5.2 20.3 0 0 0.05 1.88</pose>
+      <static>true</static>
+    </include>
+    <include>
+      <uri>model://pine_tree</uri>
+      <name>pine_17</name>
+      <pose>17.6 -18.7 0 0 0.05 3.45</pose>
+      <static>true</static>
+    </include>
+    <include>
+      <uri>model://low_poly_tree_dark</uri>
+      <name>oak_18</name>
+      <pose>-1.2 -5.8 0 0 0.05 5.67</pose>
+      <static>true</static>
+    </include>
+
+    <!-- Density increase - 18 additional trees for 1.5x density -->
+    <include>
+      <uri>model://pine_tree</uri>
+      <name>pine_18</name>
+      <pose>-18.5 6.3 0 0 0.05 2.34</pose>
+      <static>true</static>
+    </include>
+    <include>
+      <uri>model://low_poly_tree</uri>
+      <name>oak_19</name>
+      <pose>9.2 18.4 0 0 0.05 1.76</pose>
+      <static>true</static>
+    </include>
+    <include>
+      <uri>model://low_poly_tree_dark</uri>
+      <name>oak_20</name>
+      <pose>-7.3 -11.8 0 0 0.05 4.21</pose>
+      <static>true</static>
+    </include>
+    <include>
+      <uri>model://pine_tree</uri>
+      <name>pine_19</name>
+      <pose>13.7 -8.2 0 0 0.05 5.43</pose>
+      <static>true</static>
+    </include>
+    <include>
+      <uri>model://low_poly_tree</uri>
+      <name>oak_21</name>
+      <pose>-14.6 -6.5 0 0 0.05 3.12</pose>
+      <static>true</static>
+    </include>
+    <include>
+      <uri>model://pine_tree</uri>
+      <name>pine_20</name>
+      <pose>19.8 14.2 0 0 0.05 0.87</pose>
+      <static>true</static>
+    </include>
+    <include>
+      <uri>model://low_poly_tree_dark</uri>
+      <name>oak_22</name>
+      <pose>2.4 12.6 0 0 0.05 2.91</pose>
+      <static>true</static>
+    </include>
+    <include>
+      <uri>model://pine_tree</uri>
+      <name>pine_21</name>
+      <pose>-21.3 -17.5 0 0 0.05 4.67</pose>
+      <static>true</static>
+    </include>
+    <include>
+      <uri>model://low_poly_tree</uri>
+      <name>oak_23</name>
+      <pose>7.9 -3.2 0 0 0.05 1.45</pose>
+      <static>true</static>
+    </include>
+    <include>
+      <uri>model://pine_tree</uri>
+      <name>pine_22</name>
+      <pose>-3.6 7.8 0 0 0.05 3.78</pose>
+      <static>true</static>
+    </include>
+    <include>
+      <uri>model://low_poly_tree_dark</uri>
+      <name>oak_24</name>
+      <pose>15.3 3.7 0 0 0.05 5.23</pose>
+      <static>true</static>
+    </include>
+    <include>
+      <uri>model://pine_tree</uri>
+      <name>pine_23</name>
+      <pose>-11.8 17.2 0 0 0.05 2.56</pose>
+      <static>true</static>
+    </include>
+    <include>
+      <uri>model://low_poly_tree</uri>
+      <name>oak_25</name>
+      <pose>21.5 -13.6 0 0 0.05 6.01</pose>
+      <static>true</static>
+    </include>
+    <include>
+      <uri>model://pine_tree</uri>
+      <name>pine_24</name>
+      <pose>-16.4 -23.8 0 0 0.05 1.34</pose>
+      <static>true</static>
+    </include>
+    <include>
+      <uri>model://low_poly_tree_dark</uri>
+      <name>oak_26</name>
+      <pose>4.5 -16.9 0 0 0.05 4.89</pose>
+      <static>true</static>
+    </include>
+    <include>
+      <uri>model://pine_tree</uri>
+      <name>pine_25</name>
+      <pose>-9.7 -1.4 0 0 0.05 3.21</pose>
+      <static>true</static>
+    </include>
+    <include>
+      <uri>model://low_poly_tree</uri>
+      <name>oak_27</name>
+      <pose>12.4 21.8 0 0 0.05 2.08</pose>
+      <static>true</static>
+    </include>
+    <include>
+      <uri>model://pine_tree</uri>
+      <name>pine_26</name>
+      <pose>-2.1 -19.5 0 0 0.05 5.67</pose>
+      <static>true</static>
+    </include>
+
+    <!-- ONLY 4 FIRES - Well dispersed across the map -->
+    <include>
+      <uri>model://fire</uri>
+      <name>test_fire</name>
+      <pose>15.0 10.0 0 0 0.05 1.91</pose>
+      <static>true</static>
+    </include>
+
+    <include>
+      <uri>model://fire</uri>
+      <name>test_fire2</name>
+      <pose>-18.0 -15.0 0 0 0.05 1.91</pose>
+      <static>true</static>
+    </include>
+
+    <include>
+      <uri>model://fire</uri>
+      <name>test_fire3</name>
+      <pose>-20.0 18.0 0 0 0.05 1.91</pose>
+      <static>true</static>
+    </include>
+
+    <include>
+      <uri>model://fire</uri>
+      <name>test_fire4</name>
+      <pose>22.0 -20.0 0 0 0.05 1.91</pose>
+      <static>true</static>
+    </include>
+
+    <!-- Human -->
+    <include>
+      <uri>model://MaleVisitorOnPhone</uri>
+      <name>human</name>
+      <pose>10 10 0 0 0.05 1.91</pose>
+      <static>true</static>
+    </include>
+
+    <!-- ROCKS WITH LARGE GAPS - Minimum 6-8 units between rocks -->
+    <!-- Rock cluster in NW quadrant -->
+    <include>
+      <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Falling%20Rock%201</uri>
+      <name>rock_nw_1</name>
+      <pose>-23.0 23.0 0 0 0.35 2.84</pose>
+      <static>true</static>
+    </include>
+    <include>
+      <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Falling%20Rock%201</uri>
+      <name>rock_nw_2</name>
+      <pose>-20.0 23.0 0 0 0.35 5.49</pose>
+      <static>true</static>
+    </include>
+    <include>
+      <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Falling%20Rock%201</uri>
+      <name>rock_nw_3</name>
+      <pose>-12.0 22.0 0 0 0.35 4.31</pose>
+      <static>true</static>
+    </include>
+
+    <!-- Rock cluster in NE quadrant -->
+    <include>
+      <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Falling%20Rock%201</uri>
+      <name>rock_ne_1</name>
+      <pose>23.0 23.0 0 0 0.35 0.47</pose>
+      <static>true</static>
+    </include>
+    <include>
+      <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Falling%20Rock%201</uri>
+      <name>rock_ne_2</name>
+      <pose>20.0 23.0 0 0 0.35 1.20</pose>
+      <static>true</static>
+    </include>
+    <include>
+      <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Falling%20Rock%201</uri>
+      <name>rock_ne_3</name>
+      <pose>12.0 24.0 0 0 0.35 0.03</pose>
+      <static>true</static>
+    </include>
+
+    <!-- Rock cluster in center-north -->
+    <include>
+      <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Falling%20Rock%201</uri>
+      <name>rock_cn_1</name>
+      <pose>-5.0 20.0 0 0 0.35 2.32</pose>
+      <static>true</static>
+    </include>
+    <include>
+      <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Falling%20Rock%201</uri>
+      <name>rock_cn_2</name>
+      <pose>3.0 22.0 0 0 0.35 5.55</pose>
+      <static>true</static>
+    </include>
+
+    <!-- Rock cluster in SW quadrant -->
+    <include>
+      <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Falling%20Rock%201</uri>
+      <name>rock_sw_1</name>
+      <pose>-23.0 -22.0 0 0 0.35 0.64</pose>
+      <static>true</static>
+    </include>
+    <include>
+      <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Falling%20Rock%201</uri>
+      <name>rock_sw_2</name>
+      <pose>-20.0 -23.0 0 0 0.35 1.99</pose>
+      <static>true</static>
+    </include>
+    <include>
+      <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Falling%20Rock%201</uri>
+      <name>rock_sw_3</name>
+      <pose>-12.0 -20.0 0 0 0.35 6.25</pose>
+      <static>true</static>
+    </include>
+
+    <!-- Rock cluster in SE quadrant -->
+    <include>
+      <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Falling%20Rock%201</uri>
+      <name>rock_se_1</name>
+      <pose>23.0 -23.0 0 0 0.35 0.13</pose>
+      <static>true</static>
+    </include>
+    <include>
+      <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Falling%20Rock%201</uri>
+      <name>rock_se_2</name>
+      <pose>20.0 -23.0 0 0 0.35 1.82</pose>
+      <static>true</static>
+    </include>
+    <include>
+      <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Falling%20Rock%201</uri>
+      <name>rock_se_3</name>
+      <pose>12.0 -22.0 0 0 0.35 5.40</pose>
+      <static>true</static>
+    </include>
+
+    <!-- Rock cluster in center-west -->
+    <include>
+      <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Falling%20Rock%201</uri>
+      <name>rock_cw_1</name>
+      <pose>-22.0 5.0 0 0 0.35 2.56</pose>
+      <static>true</static>
+    </include>
+    <include>
+      <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Falling%20Rock%201</uri>
+      <name>rock_cw_2</name>
+      <pose>-22.0 -5.0 0 0 0.35 3.06</pose>
+      <static>true</static>
+    </include>
+
+    <!-- Rock cluster in center-east -->
+    <include>
+      <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Falling%20Rock%201</uri>
+      <name>rock_ce_1</name>
+      <pose>22.0 5.0 0 0 0.35 4.18</pose>
+      <static>true</static>
+    </include>
+    <include>
+      <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Falling%20Rock%201</uri>
+      <name>rock_ce_2</name>
+      <pose>22.0 -5.0 0 0 0.35 1.21</pose>
+      <static>true</static>
+    </include>
+
+    <!-- Rock cluster in center-south -->
+    <include>
+      <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Falling%20Rock%201</uri>
+      <name>rock_cs_1</name>
+      <pose>-5.0 -18.0 0 0 0.35 3.28</pose>
+      <static>true</static>
+    </include>
+    <include>
+      <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Falling%20Rock%201</uri>
+      <name>rock_cs_2</name>
+      <pose>5.0 -20.0 0 0 0.35 4.70</pose>
+      <static>true</static>
+    </include>
+
+    <!-- Scattered individual rocks with large spacing -->
+    <include>
+      <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Falling%20Rock%201</uri>
+      <name>rock_scattered_1</name>
+      <pose>-15.0 10.0 0 0 0.35 1.05</pose>
+      <static>true</static>
+    </include>
+    <include>
+      <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Falling%20Rock%201</uri>
+      <name>rock_scattered_2</name>
+      <pose>-8.0 -8.0 0 0 0.35 2.96</pose>
+      <static>true</static>
+    </include>
+    <include>
+      <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Falling%20Rock%201</uri>
+      <name>rock_scattered_3</name>
+      <pose>15.0 -10.0 0 0 0.35 5.24</pose>
+      <static>true</static>
+    </include>
+    <include>
+      <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Falling%20Rock%201</uri>
+      <name>rock_scattered_4</name>
+      <pose>8.0 8.0 0 0 0.35 3.96</pose>
+      <static>true</static>
+    </include>
+    <include>
+      <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Falling%20Rock%201</uri>
+      <name>rock_scattered_5</name>
+      <pose>0.0 -12.0 0 0 0.35 2.94</pose>
+      <static>true</static>
+    </include>
+    <include>
+      <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Falling%20Rock%201</uri>
+      <name>rock_scattered_6</name>
+      <pose>-18.0 -2.0 0 0 0.35 1.46</pose>
+      <static>true</static>
+    </include>
+    <include>
+      <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Falling%20Rock%201</uri>
+      <name>rock_scattered_7</name>
+      <pose>18.0 2.0 0 0 0.35 1.53</pose>
+      <static>true</static>
+    </include>
+    <include>
+      <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Falling%20Rock%201</uri>
+      <name>rock_scattered_8</name>
+      <pose>-3.0 15.0 0 0 0.35 1.51</pose>
+      <static>true</static>
+    </include>
+    <include>
+      <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Falling%20Rock%201</uri>
+      <name>rock_scattered_9</name>
+      <pose>10.0 -2.0 0 0 0.35 4.11</pose>
+      <static>true</static>
+    </include>
+
+    <!-- PERIMETER WALLS - Grey boxes to contain the Husky at edge of 50x50 floor -->
+    <!-- North wall -->
+    <model name="wall_north">
+      <static>true</static>
+      <pose>0 25 0.5 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>50 0.5 1.0</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>50 0.5 1.0</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.2 0.4 0.2 1</ambient>
+            <diffuse>0.2 0.5 0.2 1</diffuse>
+            <specular>0.1 0.1 0.1 1</specular>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- South wall -->
+    <model name="wall_south">
+      <static>true</static>
+      <pose>0 -25 0.5 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>50 0.5 1.0</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>50 0.5 1.0</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.2 0.4 0.2 1</ambient>
+            <diffuse>0.2 0.5 0.2 1</diffuse>
+            <specular>0.1 0.1 0.1 1</specular>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- East wall -->
+    <model name="wall_east">
+      <static>true</static>
+      <pose>25 0 0.5 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.5 50 1.0</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.5 50 1.0</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.2 0.4 0.2 1</ambient>
+            <diffuse>0.2 0.5 0.2 1</diffuse>
+            <specular>0.1 0.1 0.1 1</specular>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- West wall -->
+    <model name="wall_west">
+      <static>true</static>
+      <pose>-25 0 0.5 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.5 50 1.0</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.5 50 1.0</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.2 0.4 0.2 1</ambient>
+            <diffuse>0.2 0.5 0.2 1</diffuse>
+            <specular>0.1 0.1 0.1 1</specular>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- GUI settings -->
+    <gui fullscreen='0'>
+      <camera name='user_camera'>
+        <pose>0 0 15 0 1.2 0</pose>
+        <view_controller>orbit</view_controller>
+        <projection_type>perspective</projection_type>
+      </camera>
+    </gui>
+
+  </world>
+</sdf>
+
