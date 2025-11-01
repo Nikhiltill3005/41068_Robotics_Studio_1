@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Forest Fire Detection System</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            'fire-red': '#ff4444',
+            'forest-green': '#1a5d1a',
+            'ember-orange': '#ff6b35',
+            'smoke-gray': '#2d3748',
+            'drone-blue': '#3b82f6',
+            'ground-green': '#10b981'
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    .fire-pulse { animation: pulse-fire 2s ease-in-out infinite; }
+    @keyframes pulse-fire { 0%,100%{opacity:1;} 50%{opacity:.7;} }
+    .float-animation { animation: float 3s ease-in-out infinite; }
+    @keyframes float { 0%,100%{transform:translateY(0);} 50%{transform:translateY(-10px);} }
+    .gradient-border-drone,.gradient-border-ground{
+      background-size:400% 400%;
+      animation:gradient 3s ease infinite;
+      padding:3px;border-radius:1rem;
+    }
+    .gradient-border-drone{background:linear-gradient(45deg,#3b82f6,#1d4ed8,#3b82f6);}
+    .gradient-border-ground{background:linear-gradient(45deg,#10b981,#059669,#10b981);}
+    @keyframes gradient{0%{background-position:0% 50%}50%{background-position:100% 50%}100%{background-position:0% 50%}}
+    .glass-effect{backdrop-filter:blur(10px);background:rgba(45,55,72,0.8);border:1px solid rgba(255,255,255,0.1);}
+    .camera-image{filter:contrast(1.1) brightness(1.05) saturate(1.1);}
+  </style>
+</head>
+<body class="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black overflow-x-hidden">
+
+  <!-- HEADER -->
+  <header class="relative z-10 p-6">
+    <div class="max-w-7xl mx-auto flex items-center justify-between">
+      <div class="flex items-center space-x-4">
+        <div class="w-12 h-12 bg-gradient-to-br from-fire-red to-ember-orange rounded-lg flex items-center justify-center fire-pulse">
+          <span class="text-2xl">🔥</span>
+        </div>
+        <div>
+          <h1 class="text-2xl font-bold bg-gradient-to-r from-fire-red to-ember-orange bg-clip-text text-transparent">
+            Forest Fire Detection System
+          </h1>
+          <p class="text-gray-400 text-sm">Multi-vehicle IR monitoring & alert system</p>
+        </div>
+      </div>
+      <div class="hidden md:flex items-center space-x-2 text-green-400">
+        <div class="w-3 h-3 bg-green-400 rounded-full fire-pulse"></div>
+        <span class="text-sm font-medium">System Online</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- MAIN -->
+  <main class="relative z-10 px-6 pb-12">
+    <div class="max-w-7xl mx-auto">
+
+      <!-- CAMERA FEEDS -->
+      <div class="grid grid-cols-1 xl:grid-cols-2 gap-8 mb-8">
+        
+        <!-- DRONE FEED with SWITCHER -->
+        <div class="glass-effect rounded-2xl p-6">
+          <div class="flex items-center justify-between mb-6">
+            <h2 class="text-xl font-bold text-white flex items-center space-x-2">
+              <span class="w-6 h-6 bg-drone-blue rounded-full fire-pulse"></span>
+              <span>🚁 Drone Camera</span>
+            </h2>
+            <!-- Dropdown for switching feeds -->
+            <select id="droneFeedSelect" 
+                    class="bg-gray-800 text-white text-sm rounded-lg px-2 py-1 border border-gray-600"
+                    onchange="switchDroneFeed()">
+              <option value="ir">IR Camera</option>
+              <option value="rgb">RGB Camera</option>
+            </select>
+          </div>
+          <div class="relative">
+            <div class="gradient-border-drone">
+              <div class="bg-black rounded-xl overflow-hidden">
+                <img id="droneFeed" 
+                     src="http://localhost:8080/stream?topic=/drone/ir_camera/image_raw&width=1920&height=1080&quality=95"
+                     alt="Drone Camera Stream"
+                     class="w-full h-auto min-h-[400px] object-cover camera-image"/>
+              </div>
+            </div>
+          </div>
+          <div class="mt-4 flex items-center justify-between text-sm text-gray-400">
+            <span id="droneFeedLabel">Currently: IR Camera</span>
+            <span id="droneConnectionStatus">Connecting...</span>
+          </div>
+        </div>
+
+        <!-- GROUND FEED (unchanged) -->
+        <div class="glass-effect rounded-2xl p-6">
+          <div class="flex items-center justify-between mb-6">
+            <h2 class="text-xl font-bold text-white flex items-center space-x-2">
+              <span class="w-6 h-6 bg-ground-green rounded-full fire-pulse"></span>
+              <span>🚗 Ground Vehicle IR Camera</span>
+            </h2>
+            <button class="px-3 py-1 bg-ground-green/20 text-ground-green rounded-lg text-sm">🔴 LIVE</button>
+          </div>
+          <div class="relative">
+            <div class="gradient-border-ground">
+              <div class="bg-black rounded-xl overflow-hidden">
+                <img src="http://localhost:8080/stream?topic=/husky/camera/image&width=1920&height=1080&quality=95"
+                     alt="Ground Vehicle IR Camera Stream"
+                     class="w-full h-auto min-h-[400px] object-cover camera-image"/>
+              </div>
+            </div>
+          </div>
+          <div class="mt-4 text-sm text-gray-400">Resolution: 1920x1080 • FPS: 30</div>
+        </div>
+
+      </div>
+    </div>
+  </main>
+
+  <!-- SCRIPT -->
+  <script>
+    function switchDroneFeed() {
+      const select = document.getElementById('droneFeedSelect');
+      const feed = document.getElementById('droneFeed');
+      const label = document.getElementById('droneFeedLabel');
+      if (select.value === "ir") {
+        feed.src = "http://localhost:8080/stream?topic=/drone/ir_camera/image_raw&width=1920&height=1080&quality=95";
+        label.textContent = "Currently: IR Camera";
+      } else {
+        feed.src = "http://localhost:8080/stream?topic=/drone/rgb_camera/image_raw&width=1920&height=1080&quality=95";
+        label.textContent = "Currently: RGB Camera";
+      }
+    }
+  </script>
+
+</body>
+</html>

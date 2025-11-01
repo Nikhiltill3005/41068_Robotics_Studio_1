@@ -1,11 +1,15 @@
 <?xml version="1.0"?>
 <sdf version='1.8'>
   <world name="simple_trees">
+    <plugin filename="ignition-gazebo-thermal-system" name="ignition::gazebo::systems::Thermal">
+      <temperature>293.15</temperature>
+    </plugin>
     <!-- Basic world setup  -->
     <plugin name='ignition::gazebo::systems::Physics' filename='ignition-gazebo-physics-system' />
     <plugin name='ignition::gazebo::systems::UserCommands' filename='ignition-gazebo-user-commands-system' />
     <plugin name='ignition::gazebo::systems::SceneBroadcaster' filename='ignition-gazebo-scene-broadcaster-system' />
     <plugin name='ignition::gazebo::systems::Contact' filename='ignition-gazebo-contact-system' />
+    <plugin name='ignition::gazebo::systems::Sensors' filename='libignition-gazebo-sensors-system.so' />
     <light name="sun" type="directional">
       <cast_shadows>1</cast_shadows>
       <pose>0 0 10 0 -0 0</pose>
@@ -51,23 +55,51 @@
       <pose>0 0 0 0 0 0</pose>
     </include>
 
-    <!-- Oak tree -->
+
     <include>
-      <uri>
-        https://fuel.gazebosim.org/1.0/OpenRobotics/models/Oak%20tree
-      </uri>
-      <name>oak1</name>
-      <pose>0 3.0 0 0 0 0</pose>
+      <uri>model://fire</uri>
+      <name>test_fire</name>
+      <pose>6 1.5 0 0 0.05 1.91</pose>
+      <static>true</static>
     </include>
+
     
-    <!-- Pine tree -->
-    <include>
-      <uri>
-        https://fuel.gazebosim.org/1.0/OpenRobotics/models/Pine%20tree
-      </uri>
-      <name>pine1</name>
-      <pose>5.0 0.0 0 0 0 0</pose>
-    </include>
+
+
+    <!-- Hot test object positioned 5 meters in front of drone's starting position -->
+    <!-- Drone spawns at (0, 0, 2.0) facing forward (positive X direction) -->
+    <!-- So hot object should be at (5, 0, 1.0) to be visible to IR camera -->
+    <model name="hot_test_box">
+      <static>true</static>
+      <pose>6.0 0.0 1.0 0 0 0</pose>
+
+      <link name="hot_link">
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>1 1 1</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>1 0 0 1</ambient>  <!-- Red for visibility -->
+            <diffuse>1 0 0 1</diffuse>
+            <specular>0 0 0 1</specular>
+            <emissive>0.8 0 0 1</emissive>  <!-- Maximum emissive (white hot) -->
+          </material>
+          <!-- Thermal properties directly on visual element -->
+          <plugin filename="ignition-gazebo-thermal-system" name="ignition::gazebo::systems::Thermal">
+            <temperature>450.0</temperature>  <!-- Very hot: 727°C -->
+          </plugin>
+        </visual>
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>1 1 1</size>
+            </box>
+          </geometry>
+        </collision>
+      </link>
+    </model>
 
   </world>
 </sdf>

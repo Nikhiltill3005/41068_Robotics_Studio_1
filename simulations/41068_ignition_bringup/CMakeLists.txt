@@ -11,8 +11,19 @@ find_package(ament_cmake REQUIRED)
 find_package(ros_ign_interfaces REQUIRED)
 
 install(
-  DIRECTORY config launch models urdf worlds
+  DIRECTORY config launch models urdf worlds urdf_drone scripts
   DESTINATION share/${PROJECT_NAME}
+)
+
+# Install Python scripts
+install(PROGRAMS
+  scripts/fire_detection_node.py
+  scripts/odom_tf_publisher.py
+  scripts/positioning_data.py
+  scripts/navigation_gui.py
+  scripts/cmd_vel_relay.py
+  scripts/autonomous_firefighter_node.py
+  DESTINATION lib/${PROJECT_NAME}
 )
 
 if(BUILD_TESTING)

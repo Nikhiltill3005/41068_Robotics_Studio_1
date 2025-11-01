@@ -104,13 +104,7 @@
     </plugin>
   </gazebo>
 
-  <!-- Lidar and cameras use the general Sensors plugin -->
-  <gazebo>
-    <plugin
-        filename="libignition-gazebo-sensors-system.so"
-        name="ignition::gazebo::systems::Sensors">
-    </plugin>
-  </gazebo>
+  <!-- Sensors system is loaded once at world level to avoid duplicates -->
 
   <gazebo reference="base_scan">
     <material>Gazebo/FlatBlack</material>
@@ -118,21 +112,21 @@
       <pose relative_to='base_scan'>0 0 0 0 0 0</pose>
       <visualize>$(arg laser_visual)</visualize>
       <topic>model/husky/scan</topic>
-      <update_rate>3</update_rate>
+      <update_rate>10</update_rate>
       <gz_frame_id>base_scan</gz_frame_id>
       <ray>
         <scan>
           <horizontal>
-            <samples>360</samples>
+            <samples>720</samples>
             <resolution>1</resolution>
             <min_angle>0.0</min_angle>
             <max_angle>6.28319</max_angle>
           </horizontal>
         </scan>
         <range>
-          <min>0.2</min>
-          <max>40</max>
-          <resolution>0.015</resolution>
+          <min>1.0</min>
+          <max>20</max>
+          <resolution>0.005</resolution>
         </range>
         <noise>
           <type>gaussian</type>
@@ -149,8 +143,9 @@
       <camera>
         <horizontal_fov>2.0944</horizontal_fov>
         <image>
-          <width>720</width>
-          <height>480</height>
+          <width>320</width>
+          <height>240</height>
+          
         </image>
         <clip>
           <near>0.1</near>
@@ -171,7 +166,7 @@
         </depth_camera>
       </camera>
       <always_on>1</always_on>
-      <update_rate>3</update_rate> <!--10-->
+      <update_rate>10</update_rate> <!--10-->
       <visualize>$(arg camera_visual)</visualize>
       <topic>/model/husky/camera</topic>
       <gz_frame_id>camera_link</gz_frame_id>

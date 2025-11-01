@@ -1,37 +1,41 @@
 <?xml version="1.0"?>
 <sdf version='1.8'>
   <world name="bushland_world">
+    <plugin filename="ignition-gazebo-thermal-system" name="ignition::gazebo::systems::Thermal">
+      <temperature>293.15</temperature>
+    </plugin>
     <!-- Basic world setup for Gazebo Ignition -->
     <plugin name='ignition::gazebo::systems::Physics' filename='ignition-gazebo-physics-system' />
     <plugin name='ignition::gazebo::systems::UserCommands' filename='ignition-gazebo-user-commands-system' />
     <plugin name='ignition::gazebo::systems::SceneBroadcaster' filename='ignition-gazebo-scene-broadcaster-system' />
     <plugin name='ignition::gazebo::systems::Contact' filename='ignition-gazebo-contact-system' />
-    
+    <plugin name='ignition::gazebo::systems::Sensors' filename='libignition-gazebo-sensors-system.so' />
     <!-- Sun light -->
     <light name="sun" type="directional">
       <cast_shadows>1</cast_shadows>
-      <pose>0 0 100 0 0 0</pose>
-      <diffuse>0.6 0.6 0.5 1</diffuse>
-      <specular>0.3 0.3 0.3 1</specular>
+      <pose>0 0 10 0 -0 0</pose>
+      <diffuse>0.8 0.8 0.8 1</diffuse>
+      <specular>0.2 0.2 0.2 1</specular>
+      <attenuation>
+        <range>1000</range>
+        <constant>0.9</constant>
+        <linear>0.01</linear>
+        <quadratic>0.001</quadratic>
+      </attenuation>
       <direction>-0.5 0.1 -0.9</direction>
-      <intensity>2</intensity>
     </light>
-
-    <!-- Physics and environment settings -->
     <gravity>0 0 -9.81</gravity>
+    <magnetic_field>6e-06 2.3e-05 -4.2e-05</magnetic_field>
     <atmosphere type="adiabatic"/>
     <physics name="default_physics" type="ignored">
       <max_step_size>0.01</max_step_size>
       <real_time_factor>1</real_time_factor>
       <real_time_update_rate>100</real_time_update_rate>
     </physics>
-    
-    <!-- Scene settings -->
     <scene>
-      <ambient>0.95 0.95 0.8 1</ambient>
-      <background>0.6 0.7 0.9 1</background>
-      <shadows>0</shadows>
-      <grid>0</grid>
+      <ambient>1.0 1.0 1.0</ambient>
+      <background>0.8 0.8 0.8</background>
+      <shadows>1</shadows>
     </scene>
 
     <!-- Spherical coordinates -->
@@ -54,266 +58,266 @@
 <!-- Copy this content into your world file after the ground plane -->
 
     <include>
-      <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Oak%20tree</uri>
+      <uri>model://low_poly_tree_dark</uri>
       <name>oak_1</name>
       <pose>-12.68 -11.54 0 0 0.05 1.23</pose>
       
       <static>true</static>
     </include>
     <include>
-      <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Oak%20tree</uri>
+      <uri>model://low_poly_tree_dark</uri>
       <name>oak_2</name>
       <pose>-16.68 -6.33 0 0 0.05 2.91</pose>
       
       <static>true</static>
     </include>
     <include>
-      <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Oak%20tree</uri>
+      <uri>model://low_poly_tree_dark</uri>
       <name>oak_3</name>
       <pose>2.76 -3.91 0 0 0.05 0.67</pose>
       
       <static>true</static>
     </include>
     <include>
-      <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Oak%20tree</uri>
+      <uri>model://low_poly_tree_dark</uri>
       <name>oak_4</name>
       <pose>12.81 -3.66 0 0 0.05 3.01</pose>
       
       <static>true</static>
     </include>
     <include>
-      <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Oak%20tree</uri>
+      <uri>model://low_poly_tree_dark</uri>
       <name>oak_5</name>
       <pose>20.90 14.26 0 0 0.05 2.00</pose>
       
       <static>true</static>
     </include>
     <include>
-      <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Oak%20tree</uri>
+      <uri>model://low_poly_tree_dark</uri>
       <name>oak_6</name>
       <pose>-13.92 14.18 0 0 0.05 0.85</pose>
       
       <static>true</static>
     </include>
     <include>
-      <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Oak%20tree</uri>
+      <uri>model://low_poly_tree_dark</uri>
       <name>oak_7</name>
       <pose>-8.98 -14.52 0 0 0.05 0.55</pose>
       
       <static>true</static>
     </include>
     <include>
-      <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Oak%20tree</uri>
+      <uri>model://low_poly_tree_dark</uri>
       <name>oak_8</name>
       <pose>0.85 5.54 0 0 0.05 3.99</pose>
       
       <static>true</static>
     </include>
     <include>
-      <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Oak%20tree</uri>
+      <uri>model://low_poly_tree_dark</uri>
       <name>oak_9</name>
       <pose>0.07 19.93 0 0 0.05 6.18</pose>
       
       <static>true</static>
     </include>
     <include>
-      <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Oak%20tree</uri>
+      <uri>model://low_poly_tree_dark</uri>
       <name>oak_10</name>
       <pose>2.54 -3.03 0 0 0.05 5.15</pose>
       
       <static>true</static>
     </include>
     <include>
-      <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Oak%20tree</uri>
+      <uri>model://low_poly_tree_dark</uri>
       <name>oak_11</name>
       <pose>-8.00 -12.08 0 0 0.05 2.06</pose>
       
       <static>true</static>
     </include>
     <include>
-      <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Oak%20tree</uri>
+      <uri>model://low_poly_tree_dark</uri>
       <name>oak_12</name>
       <pose>-17.71 -21.04 0 0 0.05 0.30</pose>
       
       <static>true</static>
     </include>
     <include>
-      <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Oak%20tree</uri>
+      <uri>model://low_poly_tree_dark</uri>
       <name>oak_13</name>
       <pose>19.17 -15.91 0 0 0.05 4.78</pose>
       
       <static>true</static>
     </include>
     <include>
-      <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Oak%20tree</uri>
+      <uri>model://low_poly_tree</uri>
       <name>oak_14</name>
       <pose>14.56 12.24 0 0 0.05 5.70</pose>
       
       <static>true</static>
     </include>
     <include>
-      <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Oak%20tree</uri>
+      <uri>model://low_poly_tree</uri>
       <name>oak_15</name>
       <pose>-11.53 12.69 0 0 0.05 4.99</pose>
       
       <static>true</static>
     </include>
     <include>
-      <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Oak%20tree</uri>
+      <uri>model://low_poly_tree_dark</uri>
       <name>oak_16</name>
       <pose>-15.41 -4.93 0 0 0.05 3.22</pose>
       
       <static>true</static>
     </include>
     <include>
-      <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Oak%20tree</uri>
+      <uri>model://low_poly_tree_dark</uri>
       <name>oak_17</name>
       <pose>-4.83 -9.70 0 0 0.05 0.13</pose>
       
       <static>true</static>
     </include>
     <include>
-      <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Oak%20tree</uri>
+      <uri>model://low_poly_tree</uri>
       <name>oak_18</name>
       <pose>11.99 10.13 0 0 0.05 6.19</pose>
       
       <static>true</static>
     </include>
     <include>
-      <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Oak%20tree</uri>
+      <uri>model://low_poly_tree</uri>
       <name>oak_19</name>
       <pose>18.92 15.69 0 0 0.05 3.20</pose>
       
       <static>true</static>
     </include>
     <include>
-      <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Oak%20tree</uri>
+      <uri>model://low_poly_tree</uri>
       <name>oak_20</name>
       <pose>21.08 -10.86 0 0 0.05 6.20</pose>
       
       <static>true</static>
     </include>
     <include>
-      <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Oak%20tree</uri>
+      <uri>model://low_poly_tree</uri>
       <name>oak_21</name>
       <pose>20.49 -7.55 0 0 0.05 2.32</pose>
       
       <static>true</static>
     </include>
     <include>
-      <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Oak%20tree</uri>
+      <uri>model://low_poly_tree</uri>
       <name>oak_22</name>
       <pose>-15.98 0.31 0 0 0.05 3.74</pose>
       
       <static>true</static>
     </include>
     <include>
-      <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Oak%20tree</uri>
+      <uri>model://low_poly_tree</uri>
       <name>oak_23</name>
       <pose>-10.04 -18.46 0 0 0.05 1.89</pose>
       
       <static>true</static>
     </include>
     <include>
-      <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Oak%20tree</uri>
+      <uri>model://low_poly_tree</uri>
       <name>oak_24</name>
       <pose>-14.72 -16.93 0 0 0.05 3.20</pose>
       
       <static>true</static>
     </include>
     <include>
-      <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Oak%20tree</uri>
+      <uri>model://low_poly_tree</uri>
       <name>oak_25</name>
       <pose>9.24 -10.23 0 0 0.05 2.93</pose>
       
       <static>true</static>
     </include>
     <include>
-      <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Oak%20tree</uri>
+      <uri>model://low_poly_tree</uri>
       <name>oak_26</name>
       <pose>-15.73 -13.51 0 0 0.05 1.58</pose>
       
       <static>true</static>
     </include>
     <include>
-      <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Oak%20tree</uri>
+      <uri>model://low_poly_tree</uri>
       <name>oak_27</name>
       <pose>-15.60 -3.49 0 0 0.05 1.80</pose>
       
       <static>true</static>
     </include>
     <include>
-      <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Oak%20tree</uri>
+      <uri>model://low_poly_tree</uri>
       <name>oak_28</name>
       <pose>17.08 6.86 0 0 0.05 2.12</pose>
       
       <static>true</static>
     </include>
     <include>
-      <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Oak%20tree</uri>
+      <uri>model://low_poly_tree</uri>
       <name>oak_29</name>
       <pose>8.11 9.88 0 0 0.05 3.77</pose>
       
       <static>true</static>
     </include>
     <include>
-      <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Oak%20tree</uri>
+      <uri>model://low_poly_tree</uri>
       <name>oak_30</name>
       <pose>4.34 18.71 0 0 0.05 5.60</pose>
       
       <static>true</static>
     </include>
     <include>
-      <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Oak%20tree</uri>
+      <uri>model://low_poly_tree</uri>
       <name>oak_31</name>
       <pose>22.98 17.27 0 0 0.05 6.11</pose>
       
       <static>true</static>
     </include>
     <include>
-      <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Oak%20tree</uri>
+      <uri>model://low_poly_tree</uri>
       <name>oak_32</name>
       <pose>14.34 -20.25 0 0 0.05 4.94</pose>
       
       <static>true</static>
     </include>
     <include>
-      <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Oak%20tree</uri>
+      <uri>model://low_poly_tree</uri>
       <name>oak_33</name>
       <pose>-4.18 -1.03 0 0 0.05 6.24</pose>
       
       <static>true</static>
     </include>
     <include>
-      <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Oak%20tree</uri>
+      <uri>model://low_poly_tree</uri>
       <name>oak_34</name>
       <pose>21.97 -18.84 0 0 0.05 2.72</pose>
       
       <static>true</static>
     </include>
     <include>
-      <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Oak%20tree</uri>
+      <uri>model://low_poly_tree</uri>
       <name>oak_35</name>
       <pose>-22.23 -12.17 0 0 0.05 6.14</pose>
       
       <static>true</static>
     </include>
     <include>
-      <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Oak%20tree</uri>
+      <uri>model://low_poly_tree</uri>
       <name>oak_36</name>
       <pose>1.61 -11.29 0 0 0.05 0.77</pose>
       
       <static>true</static>
     </include>
     <include>
-      <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Oak%20tree</uri>
+      <uri>model://low_poly_tree</uri>
       <name>oak_37</name>
       <pose>-9.73 2.34 0 0 0.05 3.67</pose>
       
       <static>true</static>
     </include>
     <include>
-      <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Oak%20tree</uri>
+      <uri>model://low_poly_tree</uri>
       <name>oak_38</name>
       <pose>-13.69 4.43 0 0 0.05 1.64</pose>
       
@@ -326,6 +330,84 @@
       
       <static>true</static>
     </include>
+
+    <include>
+      <uri>model://fire</uri>
+      <name>test_fire2</name>
+      <pose>13.3 5.15 0 0 0.05 1.91</pose>
+      
+      <static>true</static>
+    </include>
+
+    <include>
+      <uri>model://fire</uri>
+      <name>test_fire3</name>
+      <pose>24 8 0 0 0.05 1.91</pose>
+      
+      <static>true</static>
+    </include>
+
+    <include>
+      <uri>model://fire</uri>
+      <name>test_fire4</name>
+      <pose>-3 -8 0 0 0.05 1.91</pose>
+      
+      <static>true</static>
+    </include>
+
+    <include>
+      <uri>model://fire</uri>
+      <name>test_fire5</name>
+      <pose>-12 14 0 0 0.05 1.91</pose>
+      
+      <static>true</static>
+    </include>
+
+    <include>
+      <uri>model://fire</uri>
+      <name>test_fire6</name>
+      <pose>2 -14 0 0 0.05 1.91</pose>
+      
+      <static>true</static>
+    </include>
+
+    <include>
+      <uri>model://fire</uri>
+      <name>test_fire7</name>
+      <pose>22 -22 0 0 0.05 1.91</pose>
+      
+      <static>true</static>
+    </include>
+    
+
+    <include>
+      <uri>model://fire</uri>
+      <name>test_fire8</name>
+      <pose>-24 14 0 0 0.05 1.91</pose>
+      
+      <static>true</static>
+    </include>
+    
+
+    <include>
+      <uri>model://fire</uri>
+      <name>test_fire9</name>
+      <pose>22 -14 0 0 0.05 1.91</pose>
+      
+      <static>true</static>
+    </include>
+
+
+    <include>
+      <uri>model://MaleVisitorOnPhone</uri>
+      <name>human</name>
+      <pose>10 10 0 0 0.05 1.91</pose>
+      
+      <static>true</static>
+    </include>
+    
+    
+    
     <include>
       <uri>model://pine_tree</uri>
       <name>pine_cluster_1_tree_2</name>
