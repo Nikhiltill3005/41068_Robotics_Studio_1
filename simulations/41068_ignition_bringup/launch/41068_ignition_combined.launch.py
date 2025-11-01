@@ -28,7 +28,7 @@ def generate_launch_description():
         'world',
         default_value='simple_trees',
         description='Which world to load',
-        choices=['simple_trees', 'large_demo', 'bushland']
+        choices=['simple_trees', 'large_demo', 'bushland', 'bushland_spaced']
     )
     ld.add_action(world_launch_arg)
 

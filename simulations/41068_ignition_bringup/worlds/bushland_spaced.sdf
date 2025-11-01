@@ -271,7 +271,7 @@
       <static>true</static>
     </include>
 
-    <!-- Density increase - 10 additional trees for 1.3x density -->
+    <!-- Density increase - 18 additional trees for 1.5x density -->
     <include>
       <uri>model://pine_tree</uri>
       <name>pine_18</name>
@@ -285,9 +285,21 @@
       <static>true</static>
     </include>
     <include>
+      <uri>model://low_poly_tree_dark</uri>
+      <name>oak_20</name>
+      <pose>-7.3 -11.8 0 0 0.05 4.21</pose>
+      <static>true</static>
+    </include>
+    <include>
       <uri>model://pine_tree</uri>
       <name>pine_19</name>
       <pose>13.7 -8.2 0 0 0.05 5.43</pose>
+      <static>true</static>
+    </include>
+    <include>
+      <uri>model://low_poly_tree</uri>
+      <name>oak_21</name>
+      <pose>-14.6 -6.5 0 0 0.05 3.12</pose>
       <static>true</static>
     </include>
     <include>
@@ -303,9 +315,21 @@
       <static>true</static>
     </include>
     <include>
+      <uri>model://pine_tree</uri>
+      <name>pine_21</name>
+      <pose>-21.3 -17.5 0 0 0.05 4.67</pose>
+      <static>true</static>
+    </include>
+    <include>
       <uri>model://low_poly_tree</uri>
       <name>oak_23</name>
       <pose>7.9 -3.2 0 0 0.05 1.45</pose>
+      <static>true</static>
+    </include>
+    <include>
+      <uri>model://pine_tree</uri>
+      <name>pine_22</name>
+      <pose>-3.6 7.8 0 0 0.05 3.78</pose>
       <static>true</static>
     </include>
     <include>
@@ -321,15 +345,39 @@
       <static>true</static>
     </include>
     <include>
+      <uri>model://low_poly_tree</uri>
+      <name>oak_25</name>
+      <pose>21.5 -13.6 0 0 0.05 6.01</pose>
+      <static>true</static>
+    </include>
+    <include>
+      <uri>model://pine_tree</uri>
+      <name>pine_24</name>
+      <pose>-16.4 -23.8 0 0 0.05 1.34</pose>
+      <static>true</static>
+    </include>
+    <include>
       <uri>model://low_poly_tree_dark</uri>
       <name>oak_26</name>
       <pose>4.5 -16.9 0 0 0.05 4.89</pose>
       <static>true</static>
     </include>
     <include>
+      <uri>model://pine_tree</uri>
+      <name>pine_25</name>
+      <pose>-9.7 -1.4 0 0 0.05 3.21</pose>
+      <static>true</static>
+    </include>
+    <include>
       <uri>model://low_poly_tree</uri>
       <name>oak_27</name>
       <pose>12.4 21.8 0 0 0.05 2.08</pose>
+      <static>true</static>
+    </include>
+    <include>
+      <uri>model://pine_tree</uri>
+      <name>pine_26</name>
+      <pose>-2.1 -19.5 0 0 0.05 5.67</pose>
       <static>true</static>
     </include>
 
