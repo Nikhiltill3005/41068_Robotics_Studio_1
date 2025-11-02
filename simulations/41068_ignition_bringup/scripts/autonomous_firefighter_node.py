@@ -31,7 +31,7 @@ from nav2_msgs.srv import ClearEntireCostmap
 from std_srvs.srv import Empty
 from geometry_msgs.msg import PoseArray, Pose, PoseStamped, Point, Twist
 from nav_msgs.msg import Odometry
-from std_msgs.msg import Header, ColorRGBA, Float32
+from std_msgs.msg import Header, ColorRGBA, Float32, String
 from visualization_msgs.msg import Marker, MarkerArray
 import math
 from enum import Enum
@@ -192,10 +192,18 @@ class AutonomousFirefighter(Node):
             10
         )
 
+        # Simplified status string publisher for external devices (e.g., Steam Deck)
+        self.status_string_pub = self.create_publisher(
+            String,
+            '/firefighter/status_steamdeck',
+            10
+        )
+
         # State machine timer
         self.state_machine_timer = self.create_timer(0.1, self.state_machine_update)
         self.status_timer = self.create_timer(2.0, self.publish_status)
         self.battery_timer = self.create_timer(1.0, self.publish_battery_level)
+        self.status_string_timer = self.create_timer(0.5, self.publish_status_string)  # 2 Hz
 
         self.get_logger().info('=== Autonomous Firefighter Initialized ===')
         self.get_logger().info(f'Target distance: {self.target_distance}m')
@@ -1249,6 +1257,46 @@ class AutonomousFirefighter(Node):
         battery_msg = Float32()
         battery_msg.data = self.battery_level
         self.battery_pub.publish(battery_msg)
+
+    def publish_status_string(self):
+        """Publish simplified status string for Steam Deck or other external devices
+        
+        Format: STATE|BATTERY|DETECTED|EXTINGUISHED|SINCE_CHARGE|TARGET_X,TARGET_Y|AT_BASE
+        Example: NAVIGATING|87.3|2|1|1|15.2,10.5|false
+        """
+        status_msg = String()
+        
+        # State name
+        state_name = self.state.name
+        
+        # Battery level (1 decimal)
+        battery = f"{self.battery_level:.1f}"
+        
+        # Fire counts
+        detected = str(len(self.detected_fires))
+        extinguished = str(len(self.extinguished_fires))
+        since_charge = str(self.fires_since_charge)
+        
+        # Target position (if we have a current target)
+        if self.current_target_fire:
+            target = f"{self.current_target_fire.position.x:.1f},{self.current_target_fire.position.y:.1f}"
+        else:
+            target = "none"
+        
+        # Check if at charging station
+        at_base = "false"
+        if self.robot_position:
+            dist_to_base = math.sqrt(
+                (self.robot_position.x - self.charging_station_pos[0])**2 +
+                (self.robot_position.y - self.charging_station_pos[1])**2
+            )
+            if dist_to_base < self.charging_distance_threshold:
+                at_base = "true"
+        
+        # Build status string
+        status_msg.data = f"{state_name}|{battery}|{detected}|{extinguished}|{since_charge}|{target}|{at_base}"
+        
+        self.status_string_pub.publish(status_msg)
 
 
 def main(args=None):
