@@ -21,7 +21,7 @@ import os
 import sys
 
 # ===== CONFIGURATION =====
-NUM_FIRES = 10       # <<< CHANGE THIS to set how many fires you want
+NUM_FIRES = 12       # <<< CHANGE THIS to set how many fires you want
 MIN_RADIUS = 3      # Avoid center area (charging station)
 MAX_RADIUS = 23     # Keep within bounds
 # =========================
