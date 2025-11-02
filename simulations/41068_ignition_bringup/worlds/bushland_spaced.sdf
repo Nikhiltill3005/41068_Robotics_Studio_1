@@ -407,37 +407,76 @@
       <name>pine_26</name>
       <pose>-2.1 -19.5 0 0 0.05 5.67</pose>
       <static>true</static>
-    </include>
-
-    <!-- ONLY 4 FIRES - Well dispersed across the map -->
+    </include>    <!-- ONLY 10 FIRES - Randomly dispersed across the map -->
     <include>
       <uri>model://fire</uri>
       <name>test_fire</name>
-      <pose>15.0 10.0 0 0 0.05 1.91</pose>
+      <pose>1.0 -19.5 0 0 0.05 1.59</pose>
       <static>true</static>
     </include>
 
     <include>
       <uri>model://fire</uri>
       <name>test_fire2</name>
-      <pose>-18.0 -15.0 0 0 0.05 1.91</pose>
+      <pose>3.6 -10.3 0 0 0.05 5.16</pose>
       <static>true</static>
     </include>
 
     <include>
       <uri>model://fire</uri>
       <name>test_fire3</name>
-      <pose>-20.0 18.0 0 0 0.05 1.91</pose>
+      <pose>-14.5 4.6 0 0 0.05 4.52</pose>
       <static>true</static>
     </include>
 
     <include>
       <uri>model://fire</uri>
       <name>test_fire4</name>
-      <pose>22.0 -20.0 0 0 0.05 1.91</pose>
+      <pose>-11.8 22.2 0 0 0.05 1.60</pose>
       <static>true</static>
     </include>
 
+    <include>
+      <uri>model://fire</uri>
+      <name>test_fire5</name>
+      <pose>-11.2 6.6 0 0 0.05 5.55</pose>
+      <static>true</static>
+    </include>
+
+    <include>
+      <uri>model://fire</uri>
+      <name>test_fire6</name>
+      <pose>5.6 10.8 0 0 0.05 1.45</pose>
+      <static>true</static>
+    </include>
+
+    <include>
+      <uri>model://fire</uri>
+      <name>test_fire7</name>
+      <pose>-5.7 1.3 0 0 0.05 1.28</pose>
+      <static>true</static>
+    </include>
+
+    <include>
+      <uri>model://fire</uri>
+      <name>test_fire8</name>
+      <pose>16.7 8.8 0 0 0.05 4.69</pose>
+      <static>true</static>
+    </include>
+
+    <include>
+      <uri>model://fire</uri>
+      <name>test_fire9</name>
+      <pose>11.4 12.7 0 0 0.05 4.22</pose>
+      <static>true</static>
+    </include>
+
+    <include>
+      <uri>model://fire</uri>
+      <name>test_fire10</name>
+      <pose>21.1 13.6 0 0 0.05 1.62</pose>
+      <static>true</static>
+    </include>
     <!-- Human -->
     <include>
       <uri>model://MaleVisitorOnPhone</uri>

@@ -73,7 +73,7 @@ class AutonomousFirefighter(Node):
         # Battery system parameters
         self.declare_parameter('battery_capacity', 100.0)  # Full battery percentage
         self.declare_parameter('battery_drain_per_meter', 0.5)  # Battery % drained per meter traveled
-        self.declare_parameter('fires_per_charge', 2)  # Number of fires before needing recharge
+        self.declare_parameter('fires_per_charge', 15)  # Number of fires before needing recharge
         self.declare_parameter('charging_duration', 10.0)  # Seconds to fully recharge
         self.declare_parameter('low_battery_threshold', 15.0)  # Battery % to trigger return to base
         self.declare_parameter('charging_station_x', 0.0)  # Charging station X position
@@ -278,6 +278,7 @@ class AutonomousFirefighter(Node):
                     self.fire_entities[fire_name] = None
                     self.get_logger().warn(f'  {fire_name}: could not parse position')
             
+
             self.get_logger().info(f'=== Successfully registered {len(self.fire_entities)} fire entities ===')
                 
         except subprocess.TimeoutExpired:
