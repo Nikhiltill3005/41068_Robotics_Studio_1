@@ -109,10 +109,26 @@ class SteamDeckGui(Node):
         self.fires_since_charge = 0
         self.target_coords = "none"
         self.at_base = False
+        
+        # Track previous values to avoid duplicate logging
+        self.prev_state = "UNKNOWN"
+        self.prev_fires_detected = 0
+        self.prev_fires_extinguished = 0
+        self.prev_battery = None
+        self.prev_at_base = False
+        self.last_battery_log_time = 0
+        
+        # Track extinguished fires to remove from map
+        self.extinguished_fire_positions = []
+        self.extinguish_threshold = 2.0  # Distance threshold to consider a fire extinguished
 
         # control mode publisher
         self.control_pub = self.create_publisher(ROSString, self.topics['control_mode'], 10)
         self.current_mode = "autonomous"
+        
+        # Fire scan control publisher
+        self.fire_scan_pub = self.create_publisher(Bool, '/drone/fire_scan/start_search', 10)
+        self.scan_active = False
 
         # RViz path publish toggle and publisher
         self.publish_rviz_path = False
@@ -131,6 +147,9 @@ class SteamDeckGui(Node):
         # mission timing
         self.start_time = time.time()
         self.mission_running = True
+        
+        # Tab/View management
+        self.current_tab = "overview"  # overview, mission, maps
 
         # load terrain image
         self.terrain_img = None
@@ -199,6 +218,9 @@ class SteamDeckGui(Node):
 
         # control mode status topic
         self.create_subscription(ROSString, self.topics['control_mode'], self._on_control_mode, 10)
+        
+        # Fire scan status subscriber
+        self.create_subscription(Bool, '/drone/fire_scan/start_search', self._on_scan_status, 10)
 
         # schedule GUI loops
         self.root.after(100, self._gui_video_loop)
@@ -206,6 +228,9 @@ class SteamDeckGui(Node):
         self.root.after(1000, self._update_time_display)
 
         self.get_logger().info("SteamDeck GUI initialized with topics: %s" % self.topics)
+        
+        # Log startup message
+        self.log("Steam Deck GUI initialized - Mission started")
 
     def _build_ui(self):
         # window
@@ -233,127 +258,217 @@ class SteamDeckGui(Node):
         top = ttk.Frame(self.root, padding=6, style='Dark.TFrame')
         top.pack(fill=tk.X)
 
-        self.mode_btn = tk.Button(top, text="Switch to MANUAL", bg="#0078d7", fg="white",
-                                font=("Segoe UI", 10, "bold"), relief="flat", padx=8, pady=4,
+        # Tab buttons on the left
+        tab_frame = tk.Frame(top, bg=BG)
+        tab_frame.pack(side=tk.LEFT)
+        
+        self.tab_overview_btn = tk.Button(tab_frame, text="Overview", bg="#2563eb", fg="white",
+                                         font=("Segoe UI", 10, "bold"), relief="flat", padx=12, pady=4,
+                                         command=lambda: self.switch_tab("overview"))
+        self.tab_overview_btn.pack(side=tk.LEFT, padx=(0, 2))
+        
+        self.tab_mission_btn = tk.Button(tab_frame, text="Mission Control", bg="#374151", fg="white",
+                                        font=("Segoe UI", 10, "bold"), relief="flat", padx=12, pady=4,
+                                        command=lambda: self.switch_tab("mission"))
+        self.tab_mission_btn.pack(side=tk.LEFT, padx=2)
+        
+        self.tab_maps_btn = tk.Button(tab_frame, text="Maps", bg="#374151", fg="white",
+                                      font=("Segoe UI", 10, "bold"), relief="flat", padx=12, pady=4,
+                                      command=lambda: self.switch_tab("maps"))
+        self.tab_maps_btn.pack(side=tk.LEFT, padx=2)
+
+        # Control buttons in the middle
+        control_frame = tk.Frame(top, bg=BG)
+        control_frame.pack(side=tk.LEFT, padx=20)
+        
+        self.mode_btn = tk.Button(control_frame, text="Switch to MANUAL", bg="#0078d7", fg="white",
+                                font=("Segoe UI", 9, "bold"), relief="flat", padx=8, pady=4,
                                 command=self.toggle_mode)
-        self.mode_btn.pack(side=tk.LEFT, padx=4)
+        self.mode_btn.pack(side=tk.LEFT, padx=2)
 
-        stop_btn = tk.Button(top, text="EMERGENCY STOP", bg="#e81123", fg="white",
-                            font=("Segoe UI", 10, "bold"), relief="flat", padx=8, pady=4,
-                            command=lambda: self.log("EMERGENCY STOP triggered!"))
-        stop_btn.pack(side=tk.LEFT, padx=4)
+        stop_btn = tk.Button(control_frame, text="E-STOP", bg="#e81123", fg="white",
+                            font=("Segoe UI", 9, "bold"), relief="flat", padx=8, pady=4,
+                            command=lambda: self.log("EMERGENCY STOP ACTIVATED!"))
+        stop_btn.pack(side=tk.LEFT, padx=2)
 
-        self.teleop_button = tk.Button(top, text='Teleop Inactive', bg='#555555', fg='white',
-                                    font=('Segoe UI', 11, 'bold'), relief='flat', padx=12, pady=4, state='disabled')
-        self.teleop_button.pack(side=tk.LEFT, padx=6)
+        self.teleop_button = tk.Button(control_frame, text='Teleop Off', bg='#555555', fg='white',
+                                    font=('Segoe UI', 9, 'bold'), relief='flat', padx=10, pady=4, state='disabled')
+        self.teleop_button.pack(side=tk.LEFT, padx=2)
 
-        ttk.Button(top, text="Save Snapshot", command=self.save_snapshot).pack(side=tk.LEFT, padx=4)
-        ttk.Button(top, text="Export Log", command=self._export_log).pack(side=tk.LEFT, padx=4)
+        # Status info on the right
+        self.timer_label = ttk.Label(top, text="Mission: 00:00:00", font=("Segoe UI", 9))
+        self.timer_label.pack(side=tk.RIGHT, padx=4)
+        self.system_time_label = ttk.Label(top, text=time.strftime("%H:%M:%S"), font=("Segoe UI", 9))
+        self.system_time_label.pack(side=tk.RIGHT, padx=4)
 
-        self.timer_label = ttk.Label(top, text="Mission Time: 00:00:00")
-        self.timer_label.pack(side=tk.RIGHT, padx=8)
-        self.system_time_label = ttk.Label(top, text=time.strftime("%Y-%m-%d %H:%M:%S"))
-        self.system_time_label.pack(side=tk.RIGHT, padx=8)
+        # ---------- MAIN LAYOUT - CONTAINER FOR TABS ----------
+        self.main_container = ttk.Frame(self.root)
+        self.main_container.pack(fill=tk.BOTH, expand=True, padx=4, pady=4)
+        
+        # Create all tab frames (they'll be shown/hidden)
+        self.overview_frame = ttk.Frame(self.main_container)
+        self.mission_frame = ttk.Frame(self.main_container)
+        self.maps_frame = ttk.Frame(self.main_container)
 
-        # ---------- MAIN LAYOUT ----------
-        # Hard-coded for 1280x800 Steam Deck screen
-        main = ttk.Frame(self.root)
-        main.pack(fill=tk.BOTH, expand=True, padx=4, pady=4)
-        main.columnconfigure(0, weight=1, minsize=700)   # LEFT (camera) - 700px
-        main.columnconfigure(1, weight=1, minsize=370)   # CENTER (maps) - 370px
-        main.columnconfigure(2, weight=1, minsize=190)   # RIGHT (status + logs) - 190px
-        main.rowconfigure(0, weight=1)
-
-        # ---------- CAMERA PANEL (LEFT) ----------
-        cam_frame = ttk.LabelFrame(main, text="RGB Camera", padding=4)
-        cam_frame.grid(row=0, column=0, sticky='nsew', padx=(0, 4))
+        # Build each tab
+        self._build_overview_tab()
+        self._build_mission_tab()
+        self._build_maps_tab()
+        
+        # Show overview tab by default
+        self.switch_tab("overview")
+    
+    def _build_overview_tab(self):
+        """Build the Overview tab: Camera + Fire Detection + Quick Status"""
+        self.overview_frame.columnconfigure(0, weight=2)
+        self.overview_frame.columnconfigure(1, weight=1)
+        self.overview_frame.rowconfigure(0, weight=1)
+        
+        # LEFT: Cameras
+        cam_panel = ttk.Frame(self.overview_frame)
+        cam_panel.grid(row=0, column=0, sticky='nsew', padx=(0, 4))
+        cam_panel.rowconfigure(0, weight=2)
+        cam_panel.rowconfigure(1, weight=1)
+        cam_panel.columnconfigure(0, weight=1)
+        
+        # RGB Camera
+        cam_frame = ttk.LabelFrame(cam_panel, text="RGB Camera", padding=4)
+        cam_frame.grid(row=0, column=0, sticky='nsew', pady=(0, 4))
         cam_frame.rowconfigure(1, weight=1)
         cam_frame.columnconfigure(0, weight=1)
-
-        # Camera toggle button (Husky <-> Drone)
+        
         self.cam_toggle_btn = tk.Button(cam_frame, text="View: Husky RGB", bg="#2563eb", fg="white",
                                         font=("Segoe UI", 10, "bold"), relief="flat",
                                         command=self._toggle_rgb_camera)
         self.cam_toggle_btn.grid(row=0, column=0, sticky="ew", pady=4)
-
-        # Main RGB feed
+        
         self.lbl_switchable_rgb = tk.Label(cam_frame, bg='black', fg='white', text='Waiting for RGB...')
         self.lbl_switchable_rgb.grid(row=1, column=0, sticky='nsew', pady=4)
-
-        # ---------- MAPS (CENTER) ----------
-        maps_frame = ttk.Frame(main, padding=6, style='Panel.TFrame')
-        maps_frame.grid(row=0, column=1, sticky='nsew', padx=6)
-        maps_frame.columnconfigure(0, weight=1)
-        maps_frame.rowconfigure(0, weight=2)  # SLAM gets more space
-        maps_frame.rowconfigure(1, weight=1)  # Terrain map smaller
-
-        # Fire Scan Debug Image
-        fire_scan_frame = ttk.LabelFrame(maps_frame, text="Fire Detection View", padding=6)
-        fire_scan_frame.grid(row=0, column=0, sticky='nsew', pady=(0, 6))
-        self.lbl_fire_scan = tk.Label(fire_scan_frame, bg='black', fg='white', text='Waiting for fire scan...')
+        
+        # Fire Detection View
+        fire_frame = ttk.LabelFrame(cam_panel, text="Fire Detection View", padding=4)
+        fire_frame.grid(row=1, column=0, sticky='nsew')
+        
+        self.lbl_fire_scan = tk.Label(fire_frame, bg='black', fg='white', text='Waiting for fire scan...')
         self.lbl_fire_scan.pack(fill=tk.BOTH, expand=True)
-
-        # 2D Terrain map
-        terrain_frame = ttk.LabelFrame(maps_frame, text="2D Map (Terrain)", padding=6)
-        terrain_frame.grid(row=1, column=0, sticky='nsew', pady=(6, 0))
-        self.fig, self.ax = plt.subplots(figsize=(4, 3.2))  # Adjusted for 370px column
+        
+        # RIGHT: Quick Status
+        status_panel = ttk.LabelFrame(self.overview_frame, text="Mission Status", padding=6)
+        status_panel.grid(row=0, column=1, sticky='nsew', padx=(4, 0))
+        
+        ttk.Label(status_panel, text="Husky Battery", font=("Segoe UI", 10, "bold")).pack(anchor="w")
+        self.husky_batt_pb = ttk.Progressbar(status_panel, length=200, mode="determinate", maximum=100)
+        self.husky_batt_pb.pack(anchor="w", pady=2)
+        self.batt_label = ttk.Label(status_panel, text="--.--%", font=("Segoe UI", 9))
+        self.batt_label.pack(anchor="w", pady=(0, 8))
+        
+        self.state_var = tk.StringVar(value="State: UNKNOWN")
+        ttk.Label(status_panel, textvariable=self.state_var, font=("Segoe UI", 10, "bold")).pack(anchor="w", pady=(8, 4))
+        
+        self.fire_count_var = tk.StringVar(value="Detected: 0")
+        ttk.Label(status_panel, textvariable=self.fire_count_var, font=("Segoe UI", 9)).pack(anchor="w", pady=2)
+        self.extinguished_var = tk.StringVar(value="Extinguished: 0")
+        ttk.Label(status_panel, textvariable=self.extinguished_var, font=("Segoe UI", 9)).pack(anchor="w", pady=2)
+        self.since_charge_var = tk.StringVar(value="Since charge: 0")
+        ttk.Label(status_panel, textvariable=self.since_charge_var, font=("Segoe UI", 9)).pack(anchor="w", pady=2)
+        
+        self.target_var = tk.StringVar(value="Target: none")
+        ttk.Label(status_panel, textvariable=self.target_var, font=("Segoe UI", 9)).pack(anchor="w", pady=(8, 2))
+        
+        self.sensor_health_var = tk.StringVar(value="Sensors: OK")
+        ttk.Label(status_panel, textvariable=self.sensor_health_var, font=("Segoe UI", 9)).pack(anchor="w", pady=(8, 0))
+    
+    def _build_mission_tab(self):
+        """Build the Mission Control tab: Scan controls + Status + Mission Log"""
+        self.mission_frame.columnconfigure(0, weight=1)
+        self.mission_frame.rowconfigure(0, weight=0)
+        self.mission_frame.rowconfigure(1, weight=1)
+        
+        # Mission Control Panel
+        ctrl_panel = ttk.LabelFrame(self.mission_frame, text="Fire Scan Control", padding=10)
+        ctrl_panel.grid(row=0, column=0, sticky='ew', padx=4, pady=(0, 8))
+        
+        # Scan buttons
+        btn_frame = tk.Frame(ctrl_panel, bg='#1f2937')
+        btn_frame.pack(fill=tk.X, pady=(0, 10))
+        
+        self.scan_start_btn = tk.Button(btn_frame, text="Start Fire Scan", bg="#10b981", fg="white",
+                                        font=("Segoe UI", 11, "bold"), relief="flat", padx=20, pady=8,
+                                        command=self.start_fire_scan)
+        self.scan_start_btn.pack(side=tk.LEFT, padx=(0, 8))
+        
+        self.scan_stop_btn = tk.Button(btn_frame, text="Pause Fire Scan", bg="#f59e0b", fg="white",
+                                       font=("Segoe UI", 11, "bold"), relief="flat", padx=20, pady=8,
+                                       command=self.stop_fire_scan, state='disabled')
+        self.scan_stop_btn.pack(side=tk.LEFT)
+        
+        self.scan_status_var = tk.StringVar(value="Scan Status: Inactive")
+        ttk.Label(ctrl_panel, textvariable=self.scan_status_var, font=("Segoe UI", 10)).pack(anchor="w", pady=(0, 10))
+        
+        # Search pattern
+        ttk.Label(ctrl_panel, text="Search Pattern Spacing:", font=("Segoe UI", 10, "bold")).pack(anchor="w", pady=(10, 4))
+        self.pattern_var = tk.StringVar(value="10m")
+        pattern_frame = tk.Frame(ctrl_panel, bg='#1f2937')
+        pattern_frame.pack(fill=tk.X)
+        
+        tk.Radiobutton(pattern_frame, text="5m grid (Dense)", variable=self.pattern_var, value="5m",
+                      bg='#1f2937', fg='#e5e7eb', selectcolor="#1f2937", font=("Segoe UI", 10),
+                      command=self.update_search_pattern).pack(side=tk.LEFT, padx=(0, 10))
+        tk.Radiobutton(pattern_frame, text="10m grid (Normal)", variable=self.pattern_var, value="10m",
+                      bg='#1f2937', fg='#e5e7eb', selectcolor="#1f2937", font=("Segoe UI", 10),
+                      command=self.update_search_pattern).pack(side=tk.LEFT, padx=10)
+        tk.Radiobutton(pattern_frame, text="15m grid (Fast)", variable=self.pattern_var, value="15m",
+                      bg='#1f2937', fg='#e5e7eb', selectcolor="#1f2937", font=("Segoe UI", 10),
+                      command=self.update_search_pattern).pack(side=tk.LEFT, padx=10)
+        
+        # Mission Log
+        log_frame = ttk.LabelFrame(self.mission_frame, text="Mission Log", padding=6)
+        log_frame.grid(row=1, column=0, sticky='nsew', padx=4)
+        self.log_box = scrolledtext.ScrolledText(log_frame, bg="#f7f9fb", fg="#1e2a38", font=("Consolas", 10), wrap=tk.WORD)
+        self.log_box.pack(fill=tk.BOTH, expand=True)
+        self.log_box.config(state="disabled")
+    
+    def _build_maps_tab(self):
+        """Build the Maps tab: Full-screen 2D terrain map"""
+        self.maps_frame.columnconfigure(0, weight=1)
+        self.maps_frame.rowconfigure(0, weight=1)
+        
+        terrain_frame = ttk.LabelFrame(self.maps_frame, text="2D Terrain Map - Robot Positions & Fire Locations", padding=6)
+        terrain_frame.grid(row=0, column=0, sticky='nsew', padx=4, pady=4)
+        
+        self.fig, self.ax = plt.subplots(figsize=(12, 7))
         self.ax.set_facecolor("#ffffff")
         self.ax.set_xlim(-self.world_size/2, self.world_size/2)
         self.ax.set_ylim(-self.world_size/2, self.world_size/2)
         self.ax.grid(True, alpha=0.3)
         self.canvas = FigureCanvasTkAgg(self.fig, master=terrain_frame)
         self.canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
-
-        # ---------- STATUS + MISSION LOG (RIGHT) ----------
-        side_panel = ttk.Frame(main, style='Panel.TFrame')
-        side_panel.grid(row=0, column=2, sticky='nsew', padx=(6, 0))
-        side_panel.rowconfigure(0, weight=0)
-        side_panel.rowconfigure(1, weight=1)
-
-        # Status indicators
-        status_frame = ttk.LabelFrame(side_panel, text="Status", padding=6)
-        status_frame.grid(row=0, column=0, sticky='ew', pady=(0, 10))
-
-        ttk.Label(status_frame, text="Husky Battery", font=("Segoe UI", 9, "bold")).pack(anchor="w")
-        self.husky_batt_pb = ttk.Progressbar(status_frame, length=150, mode="determinate", maximum=100)
-        self.husky_batt_pb.pack(anchor="w", pady=2)
-        self.batt_label = ttk.Label(status_frame, text="--.--%", font=("Segoe UI", 8))
-        self.batt_label.pack(anchor="w", pady=(0, 4))
-
-        # Firefighter state
-        self.state_var = tk.StringVar(value="State: UNKNOWN")
-        ttk.Label(status_frame, textvariable=self.state_var, font=("Segoe UI", 9, "bold")).pack(anchor="w", pady=(8, 0))
+    
+    def switch_tab(self, tab_name):
+        """Switch between different tabs"""
+        # Hide all tabs
+        self.overview_frame.pack_forget()
+        self.mission_frame.pack_forget()
+        self.maps_frame.pack_forget()
         
-        # Fire statistics
-        self.fire_count_var = tk.StringVar(value="Detected: 0")
-        ttk.Label(status_frame, textvariable=self.fire_count_var, font=("Segoe UI", 9)).pack(anchor="w", pady=(4, 0))
-        self.extinguished_var = tk.StringVar(value="Extinguished: 0")
-        ttk.Label(status_frame, textvariable=self.extinguished_var, font=("Segoe UI", 9)).pack(anchor="w")
-        self.since_charge_var = tk.StringVar(value="Since charge: 0")
-        ttk.Label(status_frame, textvariable=self.since_charge_var, font=("Segoe UI", 8)).pack(anchor="w")
+        # Reset button colors
+        self.tab_overview_btn.config(bg="#374151")
+        self.tab_mission_btn.config(bg="#374151")
+        self.tab_maps_btn.config(bg="#374151")
         
-        self.target_var = tk.StringVar(value="Target: none")
-        ttk.Label(status_frame, textvariable=self.target_var, font=("Segoe UI", 8)).pack(anchor="w", pady=(4, 0))
-        
-        self.husky_nearest_var = tk.StringVar(value="H→Fire: N/A")
-        self.drone_nearest_var = tk.StringVar(value="D→Fire: N/A")
-        ttk.Label(status_frame, textvariable=self.husky_nearest_var, font=("Segoe UI", 8)).pack(anchor="w", pady=(4, 0))
-        ttk.Label(status_frame, textvariable=self.drone_nearest_var, font=("Segoe UI", 8)).pack(anchor="w")
-
-        self.husky_obs_var = tk.StringVar(value="H obs: N/A")
-        self.drone_obs_var = tk.StringVar(value="D obs: N/A")
-        ttk.Label(status_frame, textvariable=self.husky_obs_var, font=("Segoe UI", 8)).pack(anchor="w", pady=(6, 0))
-        ttk.Label(status_frame, textvariable=self.drone_obs_var, font=("Segoe UI", 8)).pack(anchor="w")
-
-        self.sensor_health_var = tk.StringVar(value="Sensors: OK")
-        ttk.Label(status_frame, textvariable=self.sensor_health_var).pack(anchor="w", pady=(8, 0))
-
-        # Mission Log
-        log_frame = ttk.LabelFrame(side_panel, text="Mission Log", padding=6)
-        log_frame.grid(row=1, column=0, sticky='nsew')
-        self.log_box = scrolledtext.ScrolledText(log_frame, height=10, bg="#f7f9fb", fg="#1e2a38", font=("Consolas", 8), wrap=tk.WORD)
-        self.log_box.pack(fill=tk.BOTH, expand=True)
-        self.log_box.config(state="disabled")
+        # Show selected tab and highlight button
+        if tab_name == "overview":
+            self.overview_frame.pack(fill=tk.BOTH, expand=True)
+            self.tab_overview_btn.config(bg="#2563eb")
+            self.current_tab = "overview"
+        elif tab_name == "mission":
+            self.mission_frame.pack(fill=tk.BOTH, expand=True)
+            self.tab_mission_btn.config(bg="#2563eb")
+            self.current_tab = "mission"
+        elif tab_name == "maps":
+            self.maps_frame.pack(fill=tk.BOTH, expand=True)
+            self.tab_maps_btn.config(bg="#2563eb")
+            self.current_tab = "maps"
 
     def _toggle_camera(self):
         # Example: toggle all cameras on/off
@@ -365,7 +480,7 @@ class SteamDeckGui(Node):
         self.active_rgb_camera = 'drone' if self.active_rgb_camera == 'husky' else 'husky'
         label = f"View: {self.active_rgb_camera.capitalize()} RGB"
         self.cam_toggle_btn.config(text=label)
-        self.log(f"Switched to {self.active_rgb_camera.capitalize()} RGB camera view")
+        self.log(f"Camera: {self.active_rgb_camera.capitalize()} RGB")
 
 
     # ---------------- TELEOP / CONTROL ----------------
@@ -376,7 +491,37 @@ class SteamDeckGui(Node):
         self.control_pub.publish(m)
         btn_text = "Switch to AUTO" if self.current_mode == "manual" else "Switch to MANUAL"
         self.mode_btn.configure(text=btn_text)
-        self.log(f"Control mode changed to {self.current_mode.upper()}")
+        self.log(f"Mode: {self.current_mode.upper()}")
+    
+    def start_fire_scan(self):
+        """Start the fire scanning pattern"""
+        msg = Bool()
+        msg.data = True
+        self.fire_scan_pub.publish(msg)
+        self.scan_active = True
+        self.scan_start_btn.config(state='disabled')
+        self.scan_stop_btn.config(state='normal')
+        self.scan_status_var.set("Scan: Active")
+        self.log("Fire scan started")
+    
+    def stop_fire_scan(self):
+        """Stop the fire scanning pattern"""
+        msg = Bool()
+        msg.data = False
+        self.fire_scan_pub.publish(msg)
+        self.scan_active = False
+        self.scan_start_btn.config(state='normal')
+        self.scan_stop_btn.config(state='disabled')
+        self.scan_status_var.set("Scan: Paused")
+        self.log("Fire scan paused")
+    
+    def update_search_pattern(self):
+        """Update search pattern spacing"""
+        pattern = self.pattern_var.get()
+        spacing = int(pattern.replace('m', ''))
+        self.log(f"Search pattern updated: {spacing}m grid spacing")
+        # Note: Pattern will take effect on next scan start
+        # You could add a parameter service call here to update the node in real-time
 
     # ---------------- ROS callbacks (images & sensors) ----------------
     def _on_compressed_image(self, msg: CompressedImage, key: str):
@@ -440,7 +585,8 @@ class SteamDeckGui(Node):
         for p in msg.poses:
             fires.append((p.position.x, p.position.y))
         self.fire_positions = fires
-        self.log(f"Fire updates: {len(fires)} detected")
+        # Only log if fire count changed (don't spam the log)
+        # This message is now redundant since we get fire info from status topic
         self.update_status_panel()
 
     def _on_firefighter_status(self, msg: ROSString):
@@ -458,6 +604,62 @@ class SteamDeckGui(Node):
                 self.fires_since_charge = int(parts[4])
                 self.target_coords = parts[5]
                 self.at_base = parts[6] == "true"
+                
+                # Log only significant changes
+                current_time = time.time()
+                battery = self.batteries['husky']
+                
+                # Log state changes
+                if self.firefighter_state != self.prev_state:
+                    self.log(f"State changed: {self.firefighter_state}")
+                    self.prev_state = self.firefighter_state
+                
+                # Log when new fires detected
+                if self.fires_detected > self.prev_fires_detected:
+                    new_count = self.fires_detected - self.prev_fires_detected
+                    self.log(f"{new_count} new fire(s) detected! Total: {self.fires_detected}")
+                    self.prev_fires_detected = self.fires_detected
+                elif self.fires_detected < self.prev_fires_detected:
+                    self.log(f"Fires detected updated: {self.fires_detected}")
+                    self.prev_fires_detected = self.fires_detected
+                
+                # Log when fires extinguished and mark fire position as extinguished
+                if self.fires_extinguished > self.prev_fires_extinguished:
+                    self.log(f"Fire extinguished! Total put out: {self.fires_extinguished}")
+                    # Find the nearest fire to husky position and mark it as extinguished
+                    if self.positions.get('husky') and self.fire_positions:
+                        husky_pos = self.positions['husky']
+                        nearest_fire = None
+                        nearest_dist = float('inf')
+                        for fire in self.fire_positions:
+                            dist = math.hypot(fire[0] - husky_pos[0], fire[1] - husky_pos[1])
+                            if dist < nearest_dist and dist < self.extinguish_threshold:
+                                nearest_dist = dist
+                                nearest_fire = fire
+                        if nearest_fire and nearest_fire not in self.extinguished_fire_positions:
+                            self.extinguished_fire_positions.append(nearest_fire)
+                            self.log(f"Fire at ({nearest_fire[0]:.1f}, {nearest_fire[1]:.1f}) removed from map")
+                    self.prev_fires_extinguished = self.fires_extinguished
+                
+                # Log battery milestones (every 10%) and warnings
+                if self.prev_battery is not None:
+                    if battery <= 20 and self.prev_battery > 20:
+                        self.log(f"LOW BATTERY: {battery:.1f}%")
+                    elif battery <= 10 and self.prev_battery > 10:
+                        self.log(f"CRITICAL BATTERY: {battery:.1f}%")
+                    elif int(battery / 10) != int(self.prev_battery / 10):
+                        # Log every 10% change
+                        if (current_time - self.last_battery_log_time) > 30:  # Don't spam
+                            self.log(f"Battery: {battery:.1f}%")
+                            self.last_battery_log_time = current_time
+                self.prev_battery = battery
+                
+                # Log charging events
+                if self.at_base and not self.prev_at_base:
+                    self.log(f"Arrived at charging station (Battery: {battery:.1f}%)")
+                elif not self.at_base and self.prev_at_base:
+                    self.log(f"Departed charging station (Battery: {battery:.1f}%)")
+                self.prev_at_base = self.at_base
                 
                 self.update_status_panel()
         except Exception as e:
@@ -480,6 +682,27 @@ class SteamDeckGui(Node):
             self.log(f"Control mode reported: {self.current_mode}")
         except Exception:
             pass
+    
+    def _on_scan_status(self, msg: Bool):
+        """Update scan status from fire scan node"""
+        try:
+            was_active = self.scan_active
+            self.scan_active = msg.data
+            
+            if self.scan_active:
+                self.scan_start_btn.config(state='disabled')
+                self.scan_stop_btn.config(state='normal')
+                self.scan_status_var.set("Scan: Active")
+                if not was_active:
+                    self.log("Fire scan resumed")
+            else:
+                self.scan_start_btn.config(state='normal')
+                self.scan_stop_btn.config(state='disabled')
+                self.scan_status_var.set("Scan: Paused")
+                if was_active:
+                    self.log("Fire scan auto-paused")
+        except Exception as e:
+            self.get_logger().warn(f"Scan status callback error: {e}")
 
     def _on_joy(self, msg: Joy):
         try:
@@ -487,13 +710,13 @@ class SteamDeckGui(Node):
             rb_pressed = msg.buttons[5] == 1 if len(msg.buttons) > 5 else False
             is_active = lb_pressed or rb_pressed
             if is_active and not self.teleop_active:
-                self.teleop_button.configure(text='Teleop Active', bg='#00cc00')
+                self.teleop_button.configure(text='Teleop On', bg='#00cc00')
                 self.teleop_active = True
-                self.log("Teleop activated (bumper pressed)")
+                self.log("Manual control activated")
             elif not is_active and self.teleop_active:
-                self.teleop_button.configure(text='Teleop Inactive', bg='#555555')
+                self.teleop_button.configure(text='Teleop Off', bg='#555555')
                 self.teleop_active = False
-                self.log("Teleop deactivated (bumper released)")
+                self.log("Manual control deactivated")
         except Exception as e:
             self.get_logger().warn(f"Joy callback error: {e}")
 
@@ -553,12 +776,27 @@ class SteamDeckGui(Node):
                 self.ax.plot(x, y, 'g^', markersize=10)
                 self.ax.text(x, y + 0.7, f"D({x:.1f},{y:.1f})", fontsize=8, ha='center')
 
-            # fires
+            # fires (filter out extinguished ones)
             if self.fire_positions:
-                fx, fy = zip(*self.fire_positions)
-                self.ax.scatter(fx, fy, c='r', s=80)
-                for i, (px, py) in enumerate(self.fire_positions):
-                    self.ax.text(px + 0.4, py + 0.4, f"F{i+1}", color='red', weight='bold', fontsize=8)
+                # Filter out extinguished fires
+                active_fires = []
+                for fire in self.fire_positions:
+                    is_extinguished = False
+                    for ext_fire in self.extinguished_fire_positions:
+                        # Check if this fire matches an extinguished one (within threshold)
+                        dist = math.hypot(fire[0] - ext_fire[0], fire[1] - ext_fire[1])
+                        if dist < 0.5:  # Small threshold for matching
+                            is_extinguished = True
+                            break
+                    if not is_extinguished:
+                        active_fires.append(fire)
+                
+                # Display only active (unextinguished) fires
+                if active_fires:
+                    fx, fy = zip(*active_fires)
+                    self.ax.scatter(fx, fy, c='r', s=80, label='Active Fires')
+                    for i, (px, py) in enumerate(active_fires):
+                        self.ax.text(px + 0.4, py + 0.4, f"F{i+1}", color='red', weight='bold', fontsize=8)
 
             self.ax.legend(loc='upper right')
             self.canvas.draw_idle()
@@ -627,30 +865,9 @@ class SteamDeckGui(Node):
         except Exception:
             pass
 
-        # obstacles & sensors
-        self.husky_obs_var.set(f"H obs: {self.obstacles.get('husky', 'N/A')}")
-        self.drone_obs_var.set(f"D obs: {self.obstacles.get('drone', 'N/A')}")
+        # sensor health
         health_str = "OK" if all(self.sensor_health.values()) else "DEGRADED"
         self.sensor_health_var.set(f"Sensors: {health_str}")
-
-        # nearest-fire distances
-        def _nearest(which):
-            pos = self.positions.get(which)
-            if not pos or not self.fire_positions:
-                return None
-            distances = [math.hypot(pos[0] - fx, pos[1] - fy) for fx, fy in self.fire_positions]
-            return min(distances) if distances else None
-
-        hn = _nearest('husky')
-        dn = _nearest('drone')
-        if hn is not None:
-            self.husky_nearest_var.set(f"H→Fire: {hn:.1f}m")
-        else:
-            self.husky_nearest_var.set("H→Fire: N/A")
-        if dn is not None:
-            self.drone_nearest_var.set(f"D→Fire: {dn:.1f}m")
-        else:
-            self.drone_nearest_var.set("D→Fire: N/A")
 
     def _status_tick(self):
         try:
@@ -665,8 +882,8 @@ class SteamDeckGui(Node):
         hrs = elapsed // 3600
         mins = (elapsed % 3600) // 60
         secs = elapsed % 60
-        self.timer_label.config(text=f"Mission Time: {hrs:02d}:{mins:02d}:{secs:02d}")
-        self.system_time_label.config(text=time.strftime("%Y-%m-%d %H:%M:%S"))
+        self.timer_label.config(text=f"Mission: {hrs:02d}:{mins:02d}:{secs:02d}")
+        self.system_time_label.config(text=time.strftime("%H:%M:%S"))
         self.root.after(1000, self._update_time_display)
 
     # ---------------- Snapshot / Log export ----------------
@@ -691,6 +908,7 @@ class SteamDeckGui(Node):
             self.log(f"Snapshot saved to {outdir}")
             messagebox.showinfo("Snapshot", f"Saved to {outdir}")
         except Exception as e:
+            self.log(f"Failed to save snapshot: {e}")
             messagebox.showerror("Snapshot error", f"Failed to save snapshot: {e}")
 
     def _export_log(self):
@@ -701,8 +919,10 @@ class SteamDeckGui(Node):
                 return
             with open(fname, 'w') as f:
                 f.write(self.log_box.get('1.0', tk.END))
+            self.log(f"Mission log exported to {fname}")
             messagebox.showinfo("Saved", f"Mission log saved to {fname}")
         except Exception as e:
+            self.log(f"Failed to export log: {e}")
             messagebox.showerror("Error", f"Failed to save log: {e}")
 
     # ---------------- Run & teardown ----------------

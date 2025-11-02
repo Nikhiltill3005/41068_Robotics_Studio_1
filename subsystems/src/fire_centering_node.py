@@ -4,7 +4,7 @@ import rclpy
 from rclpy.node import Node
 from geometry_msgs.msg import Twist, PointStamped, PoseArray, Pose
 from nav_msgs.msg import Odometry
-from sensor_msgs.msg import Image
+from sensor_msgs.msg import Image, Joy
 from std_msgs.msg import Bool, Empty
 from cv_bridge import CvBridge
 import cv2
@@ -68,6 +68,15 @@ class FireScanNode(Node):
         self.search_active = self.auto_search  # Only search if auto_search enabled
         self.search_completed = False  # Track if search has completed
         
+        # Return to home functionality
+        self.returning_home = False
+        self.home_position = (0.0, 0.0)  # Home at origin
+        self.home_height = 14.0  # Same as target height
+        
+        # Teleop interruption tracking
+        self.teleop_active = False
+        self.scan_paused_by_teleop = False
+        
         # Fire logging - much simpler
         self.detected_fires = []  # List of world positions
         self.duplicate_threshold = 1.2  # Increased threshold to prevent multiple detections of same fire
@@ -82,6 +91,7 @@ class FireScanNode(Node):
         self.thermal_sub = self.create_subscription(Image, '/drone/ir_camera/image_raw', self.thermal_callback, 1)
         self.odom_sub = self.create_subscription(Odometry, '/drone/odometry', self.odom_callback, 10)
         self.search_trigger_sub = self.create_subscription(Bool, '/drone/fire_scan/start_search', self.search_trigger_callback, 10)
+        self.joy_sub = self.create_subscription(Joy, '/joy', self.joy_callback, 10)
         
         # Timers
         self.control_timer = self.create_timer(0.05, self.control_loop)  # 20 Hz
@@ -107,7 +117,7 @@ class FireScanNode(Node):
 
     def search_trigger_callback(self, msg):
         """Toggle search pattern execution"""
-        if msg.data and not self.search_active:
+        if msg.data and not self.search_active and not self.teleop_active:
             self.search_active = True
             self.search_completed = False
             self.current_waypoint = 0  # Always restart from beginning
@@ -115,7 +125,44 @@ class FireScanNode(Node):
             self.get_logger().info(f'Current fires detected: {len(self.detected_fires)}')
         elif not msg.data and self.search_active:
             self.search_active = False
+            self.scan_paused_by_teleop = False
             self.get_logger().info('SEARCH PAUSED - Debug visualization continues')
+    
+    def joy_callback(self, msg):
+        """Monitor joystick for teleop activity and pause/resume scan accordingly"""
+        try:
+            # Check if LB (button 4) or RB (button 5) are pressed for drone teleop
+            lb_pressed = msg.buttons[4] == 1 if len(msg.buttons) > 4 else False
+            rb_pressed = msg.buttons[5] == 1 if len(msg.buttons) > 5 else False
+            is_teleop_active = lb_pressed or rb_pressed
+            
+            # Detect teleop activation
+            if is_teleop_active and not self.teleop_active:
+                self.teleop_active = True
+                # Pause scan if it was active
+                if self.search_active:
+                    self.search_active = False
+                    self.scan_paused_by_teleop = True
+                    self.get_logger().info('⏸ TELEOP ACTIVE - Fire scan paused')
+                    # Publish paused status
+                    status_msg = Bool()
+                    status_msg.data = False
+                    self.search_status_pub.publish(status_msg)
+            
+            # Detect teleop deactivation
+            elif not is_teleop_active and self.teleop_active:
+                self.teleop_active = False
+                # Resume scan if it was paused by teleop
+                if self.scan_paused_by_teleop:
+                    self.search_active = True
+                    self.scan_paused_by_teleop = False
+                    self.get_logger().info('▶ TELEOP INACTIVE - Fire scan resumed')
+                    # Publish resumed status
+                    status_msg = Bool()
+                    status_msg.data = True
+                    self.search_status_pub.publish(status_msg)
+        except Exception as e:
+            self.get_logger().warn(f"Joy callback error: {e}")
 
     def thermal_callback(self, msg):
         """Process thermal images and detect fires - log immediately without centering"""
@@ -215,7 +262,7 @@ class FireScanNode(Node):
             self.generate_search_pattern()
 
     def control_loop(self):
-        """SIMPLE CONTROL: Just fly the search pattern at target height"""
+        """SIMPLE CONTROL: Just fly the search pattern at target height, then return home"""
         if not self.enabled or self.drone_position is None:
             return
             
@@ -226,18 +273,26 @@ class FireScanNode(Node):
         height_error = self.target_height - height
         at_target_height = abs(height_error) < self.height_tolerance
         
-        # Always prioritize getting to target height (only if search is active)
-        if self.search_active and not at_target_height:
-            # Smoother height control with softer gains
-            cmd.linear.z = max(-1.0, min(1.0, height_error * 1.5))
-            
-        # Execute search pattern if active and at correct height
-        if self.search_active and at_target_height and self.search_waypoints:
-            search_cmd = self.execute_search_pattern()
-            cmd.linear.x = search_cmd.linear.x
-            cmd.linear.y = search_cmd.linear.y
+        # Handle return to home
+        if self.returning_home:
+            home_cmd = self.return_to_home()
+            cmd.linear.x = home_cmd.linear.x
+            cmd.linear.y = home_cmd.linear.y
+            cmd.linear.z = home_cmd.linear.z
+        # Execute search pattern if active
+        elif self.search_active:
+            # Always prioritize getting to target height (only if search is active)
+            if not at_target_height:
+                # Smoother height control with softer gains
+                cmd.linear.z = max(-1.0, min(1.0, height_error * 1.5))
+                
+            # Execute search pattern if at correct height
+            if at_target_height and self.search_waypoints:
+                search_cmd = self.execute_search_pattern()
+                cmd.linear.x = search_cmd.linear.x
+                cmd.linear.y = search_cmd.linear.y
         
-        # Publish command (will be zero if search not active)
+        # Publish command (will be zero if nothing active)
         self.cmd_vel_pub.publish(cmd)
 
     def execute_search_pattern(self):
@@ -254,8 +309,11 @@ class FireScanNode(Node):
                 self.get_logger().info(f"Found {len(self.detected_fires)} fires total:")
                 for i, fire in enumerate(self.detected_fires):
                     self.get_logger().info(f"  Fire {i+1}: World({fire[0]:.1f}, {fire[1]:.1f})")
-                self.get_logger().info('Send True to /drone/fire_scan/start_search to restart scan')
+                self.get_logger().info('Returning to home position (0, 0)...')
                 self.get_logger().info('=' * 60)
+                
+                # Start return to home
+                self.returning_home = True
                 
                 # Publish completion status (False = not active)
                 status_msg = Bool()
@@ -286,6 +344,46 @@ class FireScanNode(Node):
         max_vel = 4.0  # Increased to allow faster scan speed
         cmd.linear.x = max(-max_vel, min(max_vel, cmd.linear.x))
         cmd.linear.y = max(-max_vel, min(max_vel, cmd.linear.y))
+        
+        return cmd
+    
+    def return_to_home(self):
+        """Navigate drone back to home position (0, 0) at target height"""
+        cmd = Twist()
+        
+        if self.drone_position is None:
+            return cmd
+        
+        # Calculate distance to home
+        dx = self.home_position[0] - self.drone_position.x
+        dy = self.home_position[1] - self.drone_position.y
+        distance = math.sqrt(dx**2 + dy**2)
+        
+        # Calculate height error
+        height_error = self.home_height - self.drone_position.z
+        
+        # Check if we've arrived at home
+        if distance < 0.5 and abs(height_error) < self.height_tolerance:
+            self.returning_home = False
+            self.get_logger().info('🏠 ARRIVED AT HOME POSITION (0, 0)')
+            self.get_logger().info('Send True to /drone/fire_scan/start_search to restart scan')
+            return cmd
+        
+        # Navigate to home with height control
+        if distance > 0.5:
+            # Smooth velocity control with proportional gain
+            speed_factor = min(1.0, distance / 2.0)  # Slow down as we approach
+            cmd.linear.x = (dx / distance) * self.scan_speed * 0.8 * speed_factor
+            cmd.linear.y = (dy / distance) * self.scan_speed * 0.8 * speed_factor
+            
+            # Apply velocity limits
+            max_vel = 4.0
+            cmd.linear.x = max(-max_vel, min(max_vel, cmd.linear.x))
+            cmd.linear.y = max(-max_vel, min(max_vel, cmd.linear.y))
+        
+        # Height control
+        if abs(height_error) > self.height_tolerance:
+            cmd.linear.z = max(-1.0, min(1.0, height_error * 1.5))
         
         return cmd
 

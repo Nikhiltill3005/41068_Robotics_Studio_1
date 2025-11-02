@@ -23,6 +23,9 @@ install(PROGRAMS
   scripts/navigation_gui.py
   scripts/cmd_vel_relay.py
   scripts/autonomous_firefighter_node.py
+  scripts/steamdeck_gui.py
+  scripts/nav_goal_gui.py
+  scripts/test_dynamic_nav.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

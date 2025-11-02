@@ -389,13 +389,13 @@ class AutonomousFirefighter(Node):
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
             
             if result.returncode == 0 and 'data: true' in result.stdout.lower():
-                self.get_logger().info(f'✓ Successfully deleted {fire_name} from simulation!')
+                self.get_logger().info(f'Successfully deleted {fire_name} from simulation!')
                 # Remove from our tracking dictionary
                 if fire_name in self.fire_entities:
                     del self.fire_entities[fire_name]
                 return True
             else:
-                self.get_logger().error(f'✗ Failed to delete {fire_name} from simulation')
+                self.get_logger().error(f'Failed to delete {fire_name} from simulation')
                 self.get_logger().error(f'  Output: {result.stdout}')
                 self.get_logger().error(f'  Error: {result.stderr}')
                 return False
@@ -590,12 +590,12 @@ class AutonomousFirefighter(Node):
         """PLANNING state: Sort and prioritize fires"""
         # Check if battery is low or fire limit reached - return to base
         if self.battery_level <= self.low_battery_threshold:
-            self.get_logger().warn(f'⚠️ Low battery ({self.battery_level:.1f}%) - Returning to charging station!')
+            self.get_logger().warn(f'Low battery ({self.battery_level:.1f}%) - Returning to charging station!')
             self.transition_to_state(FirefighterState.RETURNING_TO_BASE)
             return
         
         if self.fires_since_charge >= self.fires_per_charge:
-            self.get_logger().info(f'🔋 Fire limit reached ({self.fires_since_charge}/{self.fires_per_charge}) - Returning to recharge!')
+            self.get_logger().info(f'Fire limit reached ({self.fires_since_charge}/{self.fires_per_charge}) - Returning to recharge!')
             self.transition_to_state(FirefighterState.RETURNING_TO_BASE)
             return
         
@@ -847,7 +847,7 @@ class AutonomousFirefighter(Node):
                     goal_msg.pose.pose.position.z = 0.0
                     goal_msg.pose.pose.orientation.w = 1.0
                     
-                    self.get_logger().info(f'🏁 All fires extinguished! Returning to charging pad at ({self.charging_station_pos[0]:.1f}, {self.charging_station_pos[1]:.1f})...')
+                    self.get_logger().info(f'All fires extinguished! Returning to charging pad at ({self.charging_station_pos[0]:.1f}, {self.charging_station_pos[1]:.1f})...')
                     
                     send_goal_future = self.nav_client.send_goal_async(goal_msg)
                     send_goal_future.add_done_callback(self.goal_response_callback)
@@ -910,7 +910,7 @@ class AutonomousFirefighter(Node):
             
             if dist_to_base < self.charging_distance_threshold:
                 # Arrived at charging station
-                self.get_logger().info(f'✓ Arrived at charging station! Starting recharge...')
+                self.get_logger().info(f'Arrived at charging station! Starting recharge...')
                 # Cancel any active navigation goal
                 if self.current_goal_handle is not None:
                     self.current_goal_handle.cancel_goal_async()
@@ -939,7 +939,7 @@ class AutonomousFirefighter(Node):
         # Start charging timer on first entry
         if self.charging_start_time is None:
             self.charging_start_time = time.time()
-            self.get_logger().info(f'⚡ Charging started (battery at {self.battery_level:.1f}%)')
+            self.get_logger().info(f'Charging started (battery at {self.battery_level:.1f}%)')
         
         elapsed = time.time() - self.charging_start_time
         charging_progress = min(100.0, (elapsed / self.charging_duration) * 100.0)
@@ -955,7 +955,7 @@ class AutonomousFirefighter(Node):
             self.fires_since_charge = 0  # Reset fire counter
             self.charging_start_time = None
             
-            self.get_logger().info(f'🔋 Charging COMPLETE! Battery: {self.battery_level:.1f}% (Fire counter reset)')
+            self.get_logger().info(f'Charging COMPLETE! Battery: {self.battery_level:.1f}% (Fire counter reset)')
             
             # Check if there are fires to handle
             if len(self.detected_fires) > 0:
