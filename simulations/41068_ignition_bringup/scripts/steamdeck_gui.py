@@ -2,8 +2,8 @@
 """
 steamdeck_gui.py
 Merged GUI: Steam Deck layout + mission log + status panel + date/time/mission timer
-Camera feeds: drone_rgb, drone_ir, husky_rgb (using compressed if available, raw fallback)
-SLAM map: subscribes to slam_map_topic
+Camera feeds: drone_rgb, husky_rgb (using compressed if available, raw fallback)
+Fire Detection View: subscribes to /drone/fire_scan/debug_image
 Other topics: odometry, fire positions, battery, obstacles, control mode
 """
 
@@ -86,8 +86,8 @@ class SteamDeckGui(Node):
         except Exception:
             pass
 
-        # camera queues for latest frame only (drone_rgb, drone_ir, husky_rgb, slam_map)
-        self.camera_queues = {k: queue.Queue(maxsize=1) for k in ['drone_rgb', 'drone_ir', 'husky_rgb', 'slam_map']}
+        # camera queues for latest frame only (drone_rgb, drone_ir, husky_rgb, fire_scan)
+        self.camera_queues = {k: queue.Queue(maxsize=1) for k in ['drone_rgb', 'drone_ir', 'husky_rgb', 'fire_scan']}
         self.camera_enabled = {k: True for k in self.camera_queues.keys()}
         self._throttle_n = 2
         self._counters = {k: 0 for k in self.camera_queues.keys()}
@@ -101,6 +101,14 @@ class SteamDeckGui(Node):
         self.batteries = {'husky': None, 'drone': None}
         self.obstacles = {'husky': False, 'drone': False}
         self.sensor_health = {'husky_camera': True, 'drone_camera': True}
+        
+        # firefighter status (from /firefighter/status_steamdeck)
+        self.firefighter_state = "UNKNOWN"
+        self.fires_detected = 0
+        self.fires_extinguished = 0
+        self.fires_since_charge = 0
+        self.target_coords = "none"
+        self.at_base = False
 
         # control mode publisher
         self.control_pub = self.create_publisher(ROSString, self.topics['control_mode'], 10)
@@ -169,10 +177,8 @@ class SteamDeckGui(Node):
         # drone IR usually raw
         self.create_subscription(ROSImage, self.topics['drone_ir'], lambda m: self._on_image(m, 'drone_ir'), 10)
 
-        # SLAM map (occupancy grid)
-        map_qos = QoSProfile(reliability=QoSReliabilityPolicy.RELIABLE,
-                             history=QoSHistoryPolicy.KEEP_LAST, depth=1)
-        self.create_subscription(OccupancyGrid, self.topics['slam_map'], self._on_slam_map, map_qos)
+        # Fire scan debug image - subscribe to the fire detection debug visualization
+        self.create_subscription(ROSImage, '/drone/fire_scan/debug_image', lambda m: self._on_image(m, 'fire_scan'), 10)
 
         # odometry
         self.create_subscription(Odometry, self.topics['husky_odom'], self._on_husky_odom, 10)
@@ -181,9 +187,8 @@ class SteamDeckGui(Node):
         # fire positions
         self.create_subscription(PoseArray, self.topics['fires'], self._on_fires, 10)
 
-        # battery topics
-        self.create_subscription(Float32, self.topics['husky_batt'], self._on_husky_batt, 10)
-        self.create_subscription(Float32, self.topics['drone_batt'], self._on_drone_batt, 10)
+        # battery topics (now from status_steamdeck)
+        self.create_subscription(ROSString, '/firefighter/status_steamdeck', self._on_firefighter_status, 10)
 
         # obstacle flags (optional)
         self.create_subscription(Bool, '/husky/obstacle', lambda m: self._on_obstacle(m, 'husky'), 10)
@@ -206,7 +211,7 @@ class SteamDeckGui(Node):
         # window
         self.root.title('Robotics Control - Steam Deck')
         try:
-            self.root.geometry('1600x900')    # 1400x850
+            self.root.geometry('1280x800')    # Steam Deck native resolution
         except Exception:
             pass
 
@@ -251,11 +256,12 @@ class SteamDeckGui(Node):
         self.system_time_label.pack(side=tk.RIGHT, padx=8)
 
         # ---------- MAIN LAYOUT ----------
+        # Hard-coded for 1280x800 Steam Deck screen
         main = ttk.Frame(self.root)
         main.pack(fill=tk.BOTH, expand=True, padx=4, pady=4)
-        main.columnconfigure(0, weight=5)   # LEFT (camera) - main focus
-        main.columnconfigure(1, weight=3)   # CENTER (maps)
-        main.columnconfigure(2, weight=2)   # RIGHT (status + logs)
+        main.columnconfigure(0, weight=1, minsize=700)   # LEFT (camera) - 700px
+        main.columnconfigure(1, weight=1, minsize=370)   # CENTER (maps) - 370px
+        main.columnconfigure(2, weight=1, minsize=190)   # RIGHT (status + logs) - 190px
         main.rowconfigure(0, weight=1)
 
         # ---------- CAMERA PANEL (LEFT) ----------
@@ -274,18 +280,6 @@ class SteamDeckGui(Node):
         self.lbl_switchable_rgb = tk.Label(cam_frame, bg='black', fg='white', text='Waiting for RGB...')
         self.lbl_switchable_rgb.grid(row=1, column=0, sticky='nsew', pady=4)
 
-        # Row for smaller IR and secondary feed
-        small_row = tk.Frame(cam_frame, bg=PANEL)
-        small_row.grid(row=2, column=0, pady=8, sticky='ew')
-        small_row.columnconfigure(0, weight=1)
-        small_row.columnconfigure(1, weight=1)
-        self.lbl_drone_ir = tk.Label(small_row, bg='black', fg='white', text='Drone IR')
-        self.lbl_drone_ir.grid(row=0, column=0, padx=6, sticky='nsew')
-        self.lbl_drone_ir.configure(width=320, height=240)
-        self.lbl_husky_cam_small = tk.Label(small_row, bg='black', fg='white', text='Husky RGB (small)')
-        self.lbl_husky_cam_small.grid(row=0, column=1, padx=6, sticky='nsew')
-        self.lbl_husky_cam_small.configure(width=320, height=240)
-
         # ---------- MAPS (CENTER) ----------
         maps_frame = ttk.Frame(main, padding=6, style='Panel.TFrame')
         maps_frame.grid(row=0, column=1, sticky='nsew', padx=6)
@@ -293,16 +287,16 @@ class SteamDeckGui(Node):
         maps_frame.rowconfigure(0, weight=2)  # SLAM gets more space
         maps_frame.rowconfigure(1, weight=1)  # Terrain map smaller
 
-        # SLAM map
-        slam_frame = ttk.LabelFrame(maps_frame, text="SLAM Map (Husky)", padding=6)
-        slam_frame.grid(row=0, column=0, sticky='nsew', pady=(0, 6))
-        self.lbl_slam_map = tk.Label(slam_frame, bg='black', fg='white', text='Waiting for SLAM map...')
-        self.lbl_slam_map.pack(fill=tk.BOTH, expand=True)
+        # Fire Scan Debug Image
+        fire_scan_frame = ttk.LabelFrame(maps_frame, text="Fire Detection View", padding=6)
+        fire_scan_frame.grid(row=0, column=0, sticky='nsew', pady=(0, 6))
+        self.lbl_fire_scan = tk.Label(fire_scan_frame, bg='black', fg='white', text='Waiting for fire scan...')
+        self.lbl_fire_scan.pack(fill=tk.BOTH, expand=True)
 
         # 2D Terrain map
         terrain_frame = ttk.LabelFrame(maps_frame, text="2D Map (Terrain)", padding=6)
         terrain_frame.grid(row=1, column=0, sticky='nsew', pady=(6, 0))
-        self.fig, self.ax = plt.subplots(figsize=(5.5, 4.5))
+        self.fig, self.ax = plt.subplots(figsize=(4, 3.2))  # Adjusted for 370px column
         self.ax.set_facecolor("#ffffff")
         self.ax.set_xlim(-self.world_size/2, self.world_size/2)
         self.ax.set_ylim(-self.world_size/2, self.world_size/2)
@@ -320,25 +314,36 @@ class SteamDeckGui(Node):
         status_frame = ttk.LabelFrame(side_panel, text="Status", padding=6)
         status_frame.grid(row=0, column=0, sticky='ew', pady=(0, 10))
 
-        ttk.Label(status_frame, text="Husky Battery").pack(anchor="w")
-        self.husky_batt_pb = ttk.Progressbar(status_frame, length=180, mode="determinate", maximum=100)
+        ttk.Label(status_frame, text="Husky Battery", font=("Segoe UI", 9, "bold")).pack(anchor="w")
+        self.husky_batt_pb = ttk.Progressbar(status_frame, length=150, mode="determinate", maximum=100)
         self.husky_batt_pb.pack(anchor="w", pady=2)
+        self.batt_label = ttk.Label(status_frame, text="--.--%", font=("Segoe UI", 8))
+        self.batt_label.pack(anchor="w", pady=(0, 4))
 
-        ttk.Label(status_frame, text="Drone Battery").pack(anchor="w", pady=(6, 0))
-        self.drone_batt_pb = ttk.Progressbar(status_frame, length=180, mode="determinate", maximum=100)
-        self.drone_batt_pb.pack(anchor="w", pady=2)
+        # Firefighter state
+        self.state_var = tk.StringVar(value="State: UNKNOWN")
+        ttk.Label(status_frame, textvariable=self.state_var, font=("Segoe UI", 9, "bold")).pack(anchor="w", pady=(8, 0))
+        
+        # Fire statistics
+        self.fire_count_var = tk.StringVar(value="Detected: 0")
+        ttk.Label(status_frame, textvariable=self.fire_count_var, font=("Segoe UI", 9)).pack(anchor="w", pady=(4, 0))
+        self.extinguished_var = tk.StringVar(value="Extinguished: 0")
+        ttk.Label(status_frame, textvariable=self.extinguished_var, font=("Segoe UI", 9)).pack(anchor="w")
+        self.since_charge_var = tk.StringVar(value="Since charge: 0")
+        ttk.Label(status_frame, textvariable=self.since_charge_var, font=("Segoe UI", 8)).pack(anchor="w")
+        
+        self.target_var = tk.StringVar(value="Target: none")
+        ttk.Label(status_frame, textvariable=self.target_var, font=("Segoe UI", 8)).pack(anchor="w", pady=(4, 0))
+        
+        self.husky_nearest_var = tk.StringVar(value="H→Fire: N/A")
+        self.drone_nearest_var = tk.StringVar(value="D→Fire: N/A")
+        ttk.Label(status_frame, textvariable=self.husky_nearest_var, font=("Segoe UI", 8)).pack(anchor="w", pady=(4, 0))
+        ttk.Label(status_frame, textvariable=self.drone_nearest_var, font=("Segoe UI", 8)).pack(anchor="w")
 
-        self.fire_count_var = tk.StringVar(value="Fires: 0")
-        ttk.Label(status_frame, textvariable=self.fire_count_var).pack(anchor="w", pady=(8, 0))
-        self.husky_nearest_var = tk.StringVar(value="H dist to nearest fire: N/A")
-        self.drone_nearest_var = tk.StringVar(value="D dist to nearest fire: N/A")
-        ttk.Label(status_frame, textvariable=self.husky_nearest_var).pack(anchor="w")
-        ttk.Label(status_frame, textvariable=self.drone_nearest_var).pack(anchor="w")
-
-        self.husky_obs_var = tk.StringVar(value="H obstacle: N/A")
-        self.drone_obs_var = tk.StringVar(value="D obstacle: N/A")
-        ttk.Label(status_frame, textvariable=self.husky_obs_var).pack(anchor="w", pady=(6, 0))
-        ttk.Label(status_frame, textvariable=self.drone_obs_var).pack(anchor="w")
+        self.husky_obs_var = tk.StringVar(value="H obs: N/A")
+        self.drone_obs_var = tk.StringVar(value="D obs: N/A")
+        ttk.Label(status_frame, textvariable=self.husky_obs_var, font=("Segoe UI", 8)).pack(anchor="w", pady=(6, 0))
+        ttk.Label(status_frame, textvariable=self.drone_obs_var, font=("Segoe UI", 8)).pack(anchor="w")
 
         self.sensor_health_var = tk.StringVar(value="Sensors: OK")
         ttk.Label(status_frame, textvariable=self.sensor_health_var).pack(anchor="w", pady=(8, 0))
@@ -346,7 +351,7 @@ class SteamDeckGui(Node):
         # Mission Log
         log_frame = ttk.LabelFrame(side_panel, text="Mission Log", padding=6)
         log_frame.grid(row=1, column=0, sticky='nsew')
-        self.log_box = scrolledtext.ScrolledText(log_frame, height=10, bg="#f7f9fb", fg="#1e2a38", font=("Consolas", 9))
+        self.log_box = scrolledtext.ScrolledText(log_frame, height=10, bg="#f7f9fb", fg="#1e2a38", font=("Consolas", 8), wrap=tk.WORD)
         self.log_box.pack(fill=tk.BOTH, expand=True)
         self.log_box.config(state="disabled")
 
@@ -411,23 +416,6 @@ class SteamDeckGui(Node):
             elif 'husky' in key:
                 self.sensor_health['husky_camera'] = False
 
-    def _on_slam_map(self, msg: OccupancyGrid):
-        try:
-            width = msg.info.width
-            height = msg.info.height
-            data = np.array(msg.data, dtype=np.int8).reshape((height, width))
-            img = np.zeros((height, width, 3), dtype=np.uint8)
-            img[data == -1] = [50, 50, 50]
-            img[data == 0] = [255, 255, 255]
-            img[data > 50] = [0, 0, 0]
-            img = cv2.flip(img, 0)
-            try:
-                self.camera_queues['slam_map'].get_nowait()
-            except queue.Empty:
-                pass
-            self.camera_queues['slam_map'].put_nowait(img)
-        except Exception as e:
-            self.get_logger().warn(f"SLAM map conversion failed: {e}")
 
     def _on_husky_odom(self, msg: Odometry):
         x = msg.pose.pose.position.x
@@ -455,21 +443,25 @@ class SteamDeckGui(Node):
         self.log(f"Fire updates: {len(fires)} detected")
         self.update_status_panel()
 
-    def _on_husky_batt(self, msg: Float32):
+    def _on_firefighter_status(self, msg: ROSString):
+        """
+        Parse firefighter status message format:
+        STATE|BATTERY|DETECTED|EXTINGUISHED|SINCE_CHARGE|TARGET_X,TARGET_Y|AT_BASE
+        """
         try:
-            self.batteries['husky'] = float(msg.data)
-            self.log(f"Husky battery: {self.batteries['husky']:.1f}%")
-            self.update_status_panel()
-        except Exception:
-            pass
-
-    def _on_drone_batt(self, msg: Float32):
-        try:
-            self.batteries['drone'] = float(msg.data)
-            self.log(f"Drone battery: {self.batteries['drone']:.1f}%")
-            self.update_status_panel()
-        except Exception:
-            pass
+            parts = msg.data.split('|')
+            if len(parts) >= 7:
+                self.firefighter_state = parts[0]
+                self.batteries['husky'] = float(parts[1])
+                self.fires_detected = int(parts[2])
+                self.fires_extinguished = int(parts[3])
+                self.fires_since_charge = int(parts[4])
+                self.target_coords = parts[5]
+                self.at_base = parts[6] == "true"
+                
+                self.update_status_panel()
+        except Exception as e:
+            self.get_logger().warn(f"Failed to parse firefighter status: {e}")
 
     def _on_obstacle(self, msg: Bool, which: str):
         try:
@@ -518,29 +510,13 @@ class SteamDeckGui(Node):
             if frame is not None and self.camera_enabled.get(rgb_key, True):
                 self._update_label_with_frame(self.lbl_switchable_rgb, frame)
 
-            # small drone_ir
+            # Fire scan debug image display
             try:
-                frame_ir = self.camera_queues['drone_ir'].get_nowait()
+                fire_frame = self.camera_queues['fire_scan'].get_nowait()
             except queue.Empty:
-                frame_ir = None
-            if frame_ir is not None and self.camera_enabled.get('drone_ir', True):
-                self._update_label_with_frame(self.lbl_drone_ir, frame_ir)
-
-            # small husky small view
-            try:
-                frame_hsmall = self.camera_queues['husky_rgb'].get_nowait()
-            except queue.Empty:
-                frame_hsmall = None
-            if frame_hsmall is not None and self.camera_enabled.get('husky_rgb', True):
-                self._update_label_with_frame(self.lbl_husky_cam_small, frame_hsmall)
-
-            # SLAM map small label area (if available)
-            try:
-                map_frame = self.camera_queues['slam_map'].get_nowait()
-            except queue.Empty:
-                map_frame = None
-            if map_frame is not None:
-                self._update_label_with_frame(self.lbl_slam_map, map_frame)
+                fire_frame = None
+            if fire_frame is not None:
+                self._update_label_with_frame(self.lbl_fire_scan, fire_frame)
 
         finally:
             self.root.after(100, self._gui_video_loop)
@@ -627,27 +603,33 @@ class SteamDeckGui(Node):
             pass
 
     def update_status_panel(self):
-        # fire count
+        # Firefighter state
         try:
-            self.fire_count_var.set(f"Fires: {len(self.fire_positions)}")
+            self.state_var.set(f"State: {self.firefighter_state}")
         except Exception:
-            self.fire_count_var.set("Fires: N/A")
-
-        # batteries
+            self.state_var.set("State: UNKNOWN")
+        
+        # Fire statistics from firefighter status
         try:
-            if self.batteries.get('husky') is not None:
-                self.husky_batt_pb['value'] = max(0, min(100, float(self.batteries['husky'])))
+            self.fire_count_var.set(f"Detected: {self.fires_detected}")
+            self.extinguished_var.set(f"Extinguished: {self.fires_extinguished}")
+            self.since_charge_var.set(f"Since charge: {self.fires_since_charge}")
+            self.target_var.set(f"Target: {self.target_coords}")
         except Exception:
             pass
+
+        # Husky battery (from firefighter status)
         try:
-            if self.batteries.get('drone') is not None:
-                self.drone_batt_pb['value'] = max(0, min(100, float(self.batteries['drone'])))
+            if self.batteries.get('husky') is not None:
+                batt_val = float(self.batteries['husky'])
+                self.husky_batt_pb['value'] = max(0, min(100, batt_val))
+                self.batt_label.config(text=f"{batt_val:.1f}%")
         except Exception:
             pass
 
         # obstacles & sensors
-        self.husky_obs_var.set(f"H obstacle: {self.obstacles.get('husky', 'N/A')}")
-        self.drone_obs_var.set(f"D obstacle: {self.obstacles.get('drone', 'N/A')}")
+        self.husky_obs_var.set(f"H obs: {self.obstacles.get('husky', 'N/A')}")
+        self.drone_obs_var.set(f"D obs: {self.obstacles.get('drone', 'N/A')}")
         health_str = "OK" if all(self.sensor_health.values()) else "DEGRADED"
         self.sensor_health_var.set(f"Sensors: {health_str}")
 
@@ -662,13 +644,13 @@ class SteamDeckGui(Node):
         hn = _nearest('husky')
         dn = _nearest('drone')
         if hn is not None:
-            self.husky_nearest_var.set(f"H dist to nearest fire: {hn:.2f} m")
+            self.husky_nearest_var.set(f"H→Fire: {hn:.1f}m")
         else:
-            self.husky_nearest_var.set("H dist to nearest fire: N/A")
+            self.husky_nearest_var.set("H→Fire: N/A")
         if dn is not None:
-            self.drone_nearest_var.set(f"D dist to nearest fire: {dn:.2f} m")
+            self.drone_nearest_var.set(f"D→Fire: {dn:.1f}m")
         else:
-            self.drone_nearest_var.set("D dist to nearest fire: N/A")
+            self.drone_nearest_var.set("D→Fire: N/A")
 
     def _status_tick(self):
         try:
