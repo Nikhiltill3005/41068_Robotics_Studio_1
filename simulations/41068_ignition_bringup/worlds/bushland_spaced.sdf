@@ -283,13 +283,13 @@
     <include>
       <uri>model://pine_tree</uri>
       <name>pine_16</name>
-      <pose>-5.2 20.3 0.18 0 0.05 1.88</pose>
+      <pose>-5.2 20.3 0 0 0.05 1.88</pose>
       <static>true</static>
     </include>
     <include>
       <uri>model://pine_tree</uri>
       <name>pine_17</name>
-      <pose>17.6 -18.7 0.18 0 0.05 3.45</pose>
+      <pose>17.6 -18.7 0 0 0.05 3.45</pose>
       <static>true</static>
     </include>
     <include>
@@ -309,13 +309,13 @@
     <include>
       <uri>model://low_poly_tree</uri>
       <name>oak_19</name>
-      <pose>9.2 18.4 0 0 0.05 1.76</pose>
+      <pose>9.2 18.4 0.18 0 0.05 1.76</pose>
       <static>true</static>
     </include>
     <include>
       <uri>model://low_poly_tree_dark</uri>
       <name>oak_20</name>
-      <pose>-7.3 -11.8 0 0 0.05 4.21</pose>
+      <pose>-7.3 -11.8 0.18 0 0.05 4.21</pose>
       <static>true</static>
     </include>
     <include>
@@ -327,7 +327,7 @@
     <include>
       <uri>model://low_poly_tree</uri>
       <name>oak_21</name>
-      <pose>-14.6 -6.5 0 0 0.05 3.12</pose>
+      <pose>-14.6 -6.5 0.18 0 0.05 3.12</pose>
       <static>true</static>
     </include>
     <include>
@@ -339,7 +339,7 @@
     <include>
       <uri>model://low_poly_tree_dark</uri>
       <name>oak_22</name>
-      <pose>2.4 12.6 0 0 0.05 2.91</pose>
+      <pose>2.4 12.6 0.18 0 0.05 2.91</pose>
       <static>true</static>
     </include>
     <include>
@@ -363,7 +363,7 @@
     <include>
       <uri>model://low_poly_tree_dark</uri>
       <name>oak_24</name>
-      <pose>15.3 3.7 0 0 0.05 5.23</pose>
+      <pose>15.3 3.7 0.18 0 0.05 5.23</pose>
       <static>true</static>
     </include>
     <include>
@@ -375,7 +375,7 @@
     <include>
       <uri>model://low_poly_tree</uri>
       <name>oak_25</name>
-      <pose>21.5 -13.6 0 0 0.05 6.01</pose>
+      <pose>21.5 -13.6 0.18 0 0.05 6.01</pose>
       <static>true</static>
     </include>
     <include>
@@ -387,7 +387,7 @@
     <include>
       <uri>model://low_poly_tree_dark</uri>
       <name>oak_26</name>
-      <pose>4.5 -16.9 0 0 0.05 4.89</pose>
+      <pose>4.5 -16.9 0.18 0 0.05 4.89</pose>
       <static>true</static>
     </include>
     <include>
@@ -399,7 +399,7 @@
     <include>
       <uri>model://low_poly_tree</uri>
       <name>oak_27</name>
-      <pose>12.4 21.8 0 0 0.05 2.08</pose>
+      <pose>12.4 21.8 0.18 0 0.05 2.08</pose>
       <static>true</static>
     </include>
     <include>
