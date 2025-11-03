@@ -122,13 +122,21 @@ class SteamDeckGui(Node):
         self.extinguished_fire_positions = []
         self.extinguish_threshold = 2.0  # Distance threshold to consider a fire extinguished
 
+        # cache for fire list UI to avoid flashing
+        self._fire_list_signature = None
+        self._fire_list_count = None
+
         # control mode publisher
         self.control_pub = self.create_publisher(ROSString, self.topics['control_mode'], 10)
         self.current_mode = "autonomous"
         
-        # Fire scan control publisher
+        # Fire scan control publisher (Drone)
         self.fire_scan_pub = self.create_publisher(Bool, '/drone/fire_scan/start_search', 10)
         self.scan_active = False
+        
+        # Firefighter control publisher (Husky)
+        self.firefighter_pub = self.create_publisher(Bool, '/husky/firefighter/start', 10)
+        self.firefighter_active = False
 
         # RViz path publish toggle and publisher
         self.publish_rviz_path = False
@@ -206,8 +214,8 @@ class SteamDeckGui(Node):
         # fire positions
         self.create_subscription(PoseArray, self.topics['fires'], self._on_fires, 10)
 
-        # battery topics (now from status_steamdeck)
-        self.create_subscription(ROSString, '/firefighter/status_steamdeck', self._on_firefighter_status, 10)
+        # battery/state topics (from status_steamdeck)
+        self.create_subscription(ROSString, '/firefighter/status_steamdeck', self._on_firefighter_status_string, 10)
 
         # obstacle flags (optional)
         self.create_subscription(Bool, '/husky/obstacle', lambda m: self._on_obstacle(m, 'husky'), 10)
@@ -219,8 +227,11 @@ class SteamDeckGui(Node):
         # control mode status topic
         self.create_subscription(ROSString, self.topics['control_mode'], self._on_control_mode, 10)
         
-        # Fire scan status subscriber
+        # Fire scan status subscriber (Drone)
         self.create_subscription(Bool, '/drone/fire_scan/start_search', self._on_scan_status, 10)
+        
+        # Firefighter status subscriber (Husky) - same topic as commands (like drone)
+        self.create_subscription(Bool, '/husky/firefighter/start', self._on_firefighter_status_bool, 10)
 
         # schedule GUI loops
         self.root.after(100, self._gui_video_loop)
@@ -320,129 +331,345 @@ class SteamDeckGui(Node):
     
     def _build_overview_tab(self):
         """Build the Overview tab: Camera + Fire Detection + Quick Status"""
+        self.overview_frame.configure(style='Dark.TFrame')
         self.overview_frame.columnconfigure(0, weight=2)
         self.overview_frame.columnconfigure(1, weight=1)
         self.overview_frame.rowconfigure(0, weight=1)
         
         # LEFT: Cameras
-        cam_panel = ttk.Frame(self.overview_frame)
+        cam_panel = tk.Frame(self.overview_frame, bg='#0f172a')
         cam_panel.grid(row=0, column=0, sticky='nsew', padx=(0, 4))
         cam_panel.rowconfigure(0, weight=2)
         cam_panel.rowconfigure(1, weight=1)
         cam_panel.columnconfigure(0, weight=1)
         
-        # RGB Camera
-        cam_frame = ttk.LabelFrame(cam_panel, text="RGB Camera", padding=4)
-        cam_frame.grid(row=0, column=0, sticky='nsew', pady=(0, 4))
-        cam_frame.rowconfigure(1, weight=1)
-        cam_frame.columnconfigure(0, weight=1)
+        # RGB Camera (Dark Theme)
+        cam_outer = tk.Frame(cam_panel, bg='#1e293b', relief='ridge', bd=2)
+        cam_outer.grid(row=0, column=0, sticky='nsew', pady=(0, 4))
+        cam_outer.rowconfigure(1, weight=1)
+        cam_outer.columnconfigure(0, weight=1)
         
-        self.cam_toggle_btn = tk.Button(cam_frame, text="View: Husky RGB", bg="#2563eb", fg="white",
+        cam_header = tk.Frame(cam_outer, bg='#334155', height=35)
+        cam_header.grid(row=0, column=0, sticky='ew')
+        tk.Label(cam_header, text="RGB CAMERA", bg='#334155', fg='#f1f5f9',
+                font=("Segoe UI", 11, "bold")).pack(pady=6)
+        
+        cam_content = tk.Frame(cam_outer, bg='#0f172a')
+        cam_content.grid(row=1, column=0, sticky='nsew')
+        cam_content.rowconfigure(1, weight=1)
+        cam_content.columnconfigure(0, weight=1)
+        
+        self.cam_toggle_btn = tk.Button(cam_content, text="VIEW: HUSKY RGB", bg="#2563eb", fg="white",
                                         font=("Segoe UI", 10, "bold"), relief="flat",
-                                        command=self._toggle_rgb_camera)
-        self.cam_toggle_btn.grid(row=0, column=0, sticky="ew", pady=4)
+                                        command=self._toggle_rgb_camera, cursor="hand2", pady=8)
+        self.cam_toggle_btn.grid(row=0, column=0, sticky="ew", padx=4, pady=4)
         
-        self.lbl_switchable_rgb = tk.Label(cam_frame, bg='black', fg='white', text='Waiting for RGB...')
-        self.lbl_switchable_rgb.grid(row=1, column=0, sticky='nsew', pady=4)
+        self.lbl_switchable_rgb = tk.Label(cam_content, bg='#000000', fg='#64748b', 
+                                           text='Waiting for RGB feed...', 
+                                           font=("Segoe UI", 9, "italic"))
+        self.lbl_switchable_rgb.grid(row=1, column=0, sticky='nsew', padx=4, pady=4)
         
-        # Fire Detection View
-        fire_frame = ttk.LabelFrame(cam_panel, text="Fire Detection View", padding=4)
-        fire_frame.grid(row=1, column=0, sticky='nsew')
+        # Fire Detection View (Dark Theme)
+        fire_outer = tk.Frame(cam_panel, bg='#1e293b', relief='ridge', bd=2)
+        fire_outer.grid(row=1, column=0, sticky='nsew')
         
-        self.lbl_fire_scan = tk.Label(fire_frame, bg='black', fg='white', text='Waiting for fire scan...')
-        self.lbl_fire_scan.pack(fill=tk.BOTH, expand=True)
+        fire_header = tk.Frame(fire_outer, bg='#334155', height=35)
+        fire_header.pack(fill=tk.X)
+        tk.Label(fire_header, text="FIRE DETECTION", bg='#334155', fg='#f1f5f9',
+                font=("Segoe UI", 11, "bold")).pack(pady=6)
         
-        # RIGHT: Quick Status
-        status_panel = ttk.LabelFrame(self.overview_frame, text="Mission Status", padding=6)
-        status_panel.grid(row=0, column=1, sticky='nsew', padx=(4, 0))
+        fire_content = tk.Frame(fire_outer, bg='#0f172a')
+        fire_content.pack(fill=tk.BOTH, expand=True, padx=2, pady=2)
         
-        ttk.Label(status_panel, text="Husky Battery", font=("Segoe UI", 10, "bold")).pack(anchor="w")
-        self.husky_batt_pb = ttk.Progressbar(status_panel, length=200, mode="determinate", maximum=100)
-        self.husky_batt_pb.pack(anchor="w", pady=2)
-        self.batt_label = ttk.Label(status_panel, text="--.--%", font=("Segoe UI", 9))
-        self.batt_label.pack(anchor="w", pady=(0, 8))
+        self.lbl_fire_scan = tk.Label(fire_content, bg='#000000', fg='#64748b', 
+                                      text='Waiting for fire scan feed...', 
+                                      font=("Segoe UI", 9, "italic"))
+        self.lbl_fire_scan.pack(fill=tk.BOTH, expand=True, padx=4, pady=4)
         
-        self.state_var = tk.StringVar(value="State: UNKNOWN")
-        ttk.Label(status_panel, textvariable=self.state_var, font=("Segoe UI", 10, "bold")).pack(anchor="w", pady=(8, 4))
+        # RIGHT: Quick Status (Dark Theme)
+        status_outer = tk.Frame(self.overview_frame, bg='#1e293b', relief='ridge', bd=2)
+        status_outer.grid(row=0, column=1, sticky='nsew', padx=(4, 0))
         
-        self.fire_count_var = tk.StringVar(value="Detected: 0")
-        ttk.Label(status_panel, textvariable=self.fire_count_var, font=("Segoe UI", 9)).pack(anchor="w", pady=2)
-        self.extinguished_var = tk.StringVar(value="Extinguished: 0")
-        ttk.Label(status_panel, textvariable=self.extinguished_var, font=("Segoe UI", 9)).pack(anchor="w", pady=2)
-        self.since_charge_var = tk.StringVar(value="Since charge: 0")
-        ttk.Label(status_panel, textvariable=self.since_charge_var, font=("Segoe UI", 9)).pack(anchor="w", pady=2)
+        status_header = tk.Frame(status_outer, bg='#334155', height=35)
+        status_header.pack(fill=tk.X)
+        tk.Label(status_header, text="MISSION STATUS", bg='#334155', fg='#f1f5f9',
+                font=("Segoe UI", 11, "bold")).pack(pady=6)
         
-        self.target_var = tk.StringVar(value="Target: none")
-        ttk.Label(status_panel, textvariable=self.target_var, font=("Segoe UI", 9)).pack(anchor="w", pady=(8, 2))
+        status_content = tk.Frame(status_outer, bg='#1e293b')
+        status_content.pack(fill=tk.BOTH, expand=True, padx=8, pady=8)
         
-        self.sensor_health_var = tk.StringVar(value="Sensors: OK")
-        ttk.Label(status_panel, textvariable=self.sensor_health_var, font=("Segoe UI", 9)).pack(anchor="w", pady=(8, 0))
+        # Battery Section
+        battery_frame = tk.Frame(status_content, bg='#0f172a', relief='solid', bd=1)
+        battery_frame.pack(fill=tk.X, pady=(0, 8))
+        
+        tk.Label(battery_frame, text="HUSKY BATTERY", bg='#0f172a', fg='#cbd5e1',
+                font=("Segoe UI", 9, "bold")).pack(anchor="w", padx=6, pady=(6, 2))
+        
+        self.husky_batt_pb = ttk.Progressbar(battery_frame, length=200, mode="determinate", maximum=100)
+        self.husky_batt_pb.pack(anchor="w", padx=6, pady=2)
+        
+        self.batt_label = tk.Label(battery_frame, text="--.--%", bg='#0f172a', fg='#10b981',
+                                   font=("Segoe UI", 10, "bold"))
+        self.batt_label.pack(anchor="w", padx=6, pady=(2, 6))
+        
+        # State Section
+        state_frame = tk.Frame(status_content, bg='#0f172a', relief='solid', bd=1)
+        state_frame.pack(fill=tk.X, pady=(0, 8))
+        
+        self.state_var = tk.StringVar(value="UNKNOWN")
+        tk.Label(state_frame, text="STATE:", bg='#0f172a', fg='#94a3b8',
+                font=("Segoe UI", 8, "bold")).pack(anchor="w", padx=6, pady=(6, 0))
+        tk.Label(state_frame, textvariable=self.state_var, bg='#0f172a', fg='#60a5fa',
+                font=("Segoe UI", 11, "bold")).pack(anchor="w", padx=6, pady=(2, 6))
+        
+        # Fire Statistics Section
+        fires_frame = tk.Frame(status_content, bg='#0f172a', relief='solid', bd=1)
+        fires_frame.pack(fill=tk.X, pady=(0, 8))
+        
+        tk.Label(fires_frame, text="FIRE STATISTICS", bg='#0f172a', fg='#cbd5e1',
+                font=("Segoe UI", 9, "bold")).pack(anchor="w", padx=6, pady=(6, 4))
+        
+        # Detected fires
+        detected_row = tk.Frame(fires_frame, bg='#0f172a')
+        detected_row.pack(fill=tk.X, padx=6, pady=2)
+        self.fire_count_var = tk.StringVar(value="0")
+        tk.Label(detected_row, text="Detected:", bg='#0f172a', fg='#94a3b8',
+                font=("Consolas", 9)).pack(side=tk.LEFT)
+        tk.Label(detected_row, textvariable=self.fire_count_var, bg='#0f172a', fg='#fbbf24',
+                font=("Consolas", 10, "bold")).pack(side=tk.RIGHT)
+        
+        # Extinguished fires
+        ext_row = tk.Frame(fires_frame, bg='#0f172a')
+        ext_row.pack(fill=tk.X, padx=6, pady=2)
+        self.extinguished_var = tk.StringVar(value="0")
+        tk.Label(ext_row, text="Extinguished:", bg='#0f172a', fg='#94a3b8',
+                font=("Consolas", 9)).pack(side=tk.LEFT)
+        tk.Label(ext_row, textvariable=self.extinguished_var, bg='#0f172a', fg='#10b981',
+                font=("Consolas", 10, "bold")).pack(side=tk.RIGHT)
+        
+        # Since charge
+        charge_row = tk.Frame(fires_frame, bg='#0f172a')
+        charge_row.pack(fill=tk.X, padx=6, pady=(2, 6))
+        self.since_charge_var = tk.StringVar(value="0")
+        tk.Label(charge_row, text="Since Charge:", bg='#0f172a', fg='#94a3b8',
+                font=("Consolas", 9)).pack(side=tk.LEFT)
+        tk.Label(charge_row, textvariable=self.since_charge_var, bg='#0f172a', fg='#e2e8f0',
+                font=("Consolas", 10, "bold")).pack(side=tk.RIGHT)
+        
+        # Target Section
+        target_frame = tk.Frame(status_content, bg='#0f172a', relief='solid', bd=1)
+        target_frame.pack(fill=tk.X, pady=(0, 8))
+        
+        tk.Label(target_frame, text="TARGET:", bg='#0f172a', fg='#94a3b8',
+                font=("Segoe UI", 8, "bold")).pack(anchor="w", padx=6, pady=(6, 0))
+        self.target_var = tk.StringVar(value="none")
+        tk.Label(target_frame, textvariable=self.target_var, bg='#0f172a', fg='#f59e0b',
+                font=("Consolas", 9, "bold")).pack(anchor="w", padx=6, pady=(2, 6))
+        
+        # Sensor Health Section
+        sensor_frame = tk.Frame(status_content, bg='#0f172a', relief='solid', bd=1)
+        sensor_frame.pack(fill=tk.X)
+        
+        sensor_row = tk.Frame(sensor_frame, bg='#0f172a')
+        sensor_row.pack(fill=tk.X, padx=6, pady=6)
+        self.sensor_health_var = tk.StringVar(value="OK")
+        tk.Label(sensor_row, text="Sensors:", bg='#0f172a', fg='#94a3b8',
+                font=("Consolas", 9)).pack(side=tk.LEFT)
+        tk.Label(sensor_row, textvariable=self.sensor_health_var, bg='#0f172a', fg='#10b981',
+                font=("Consolas", 10, "bold")).pack(side=tk.RIGHT)
     
     def _build_mission_tab(self):
         """Build the Mission Control tab: Scan controls + Status + Mission Log"""
+        self.mission_frame.configure(style='Dark.TFrame')
         self.mission_frame.columnconfigure(0, weight=1)
+        self.mission_frame.columnconfigure(1, weight=1)
         self.mission_frame.rowconfigure(0, weight=0)
         self.mission_frame.rowconfigure(1, weight=1)
         
-        # Mission Control Panel
-        ctrl_panel = ttk.LabelFrame(self.mission_frame, text="Fire Scan Control", padding=10)
-        ctrl_panel.grid(row=0, column=0, sticky='ew', padx=4, pady=(0, 8))
+        # DRONE Fire Scan Control Panel (Dark Theme) - LEFT
+        drone_ctrl_panel = tk.Frame(self.mission_frame, bg='#1e293b', relief='ridge', bd=2)
+        drone_ctrl_panel.grid(row=0, column=0, sticky='ew', padx=(4, 2), pady=(0, 8))
+        
+        # Header
+        drone_header_frame = tk.Frame(drone_ctrl_panel, bg='#334155', height=40)
+        drone_header_frame.pack(fill=tk.X, padx=0, pady=0)
+        tk.Label(drone_header_frame, text="DRONE FIRE SCAN", bg='#334155', fg='#f1f5f9',
+                font=("Segoe UI", 12, "bold")).pack(pady=8)
+        
+        # Content area - DRONE
+        drone_content_frame = tk.Frame(drone_ctrl_panel, bg='#1e293b')
+        drone_content_frame.pack(fill=tk.X, padx=12, pady=12)
         
         # Scan buttons
-        btn_frame = tk.Frame(ctrl_panel, bg='#1f2937')
-        btn_frame.pack(fill=tk.X, pady=(0, 10))
+        drone_btn_frame = tk.Frame(drone_content_frame, bg='#1e293b')
+        drone_btn_frame.pack(fill=tk.X, pady=(0, 12))
         
-        self.scan_start_btn = tk.Button(btn_frame, text="Start Fire Scan", bg="#10b981", fg="white",
-                                        font=("Segoe UI", 11, "bold"), relief="flat", padx=20, pady=8,
-                                        command=self.start_fire_scan)
-        self.scan_start_btn.pack(side=tk.LEFT, padx=(0, 8))
+        self.scan_start_btn = tk.Button(drone_btn_frame, text="▶ START", bg="#10b981", fg="white",
+                                        font=("Segoe UI", 10, "bold"), relief="flat", padx=20, pady=8,
+                                        command=self.start_fire_scan, cursor="hand2")
+        self.scan_start_btn.pack(side=tk.LEFT, padx=(0, 6))
         
-        self.scan_stop_btn = tk.Button(btn_frame, text="Pause Fire Scan", bg="#f59e0b", fg="white",
-                                       font=("Segoe UI", 11, "bold"), relief="flat", padx=20, pady=8,
-                                       command=self.stop_fire_scan, state='disabled')
+        self.scan_stop_btn = tk.Button(drone_btn_frame, text="⏸ PAUSE", bg="#f59e0b", fg="white",
+                                       font=("Segoe UI", 10, "bold"), relief="flat", padx=20, pady=8,
+                                       command=self.stop_fire_scan, state='disabled', cursor="hand2")
         self.scan_stop_btn.pack(side=tk.LEFT)
         
-        self.scan_status_var = tk.StringVar(value="Scan Status: Inactive")
-        ttk.Label(ctrl_panel, textvariable=self.scan_status_var, font=("Segoe UI", 10)).pack(anchor="w", pady=(0, 10))
+        # Status display
+        drone_status_frame = tk.Frame(drone_content_frame, bg='#0f172a', relief='solid', bd=1)
+        drone_status_frame.pack(fill=tk.X, pady=(0, 8))
+        self.scan_status_var = tk.StringVar(value="Status: Inactive")
+        tk.Label(drone_status_frame, textvariable=self.scan_status_var, bg='#0f172a', fg='#94a3b8',
+                font=("Segoe UI", 9, "bold")).pack(pady=6, padx=8, anchor='w')
         
         # Search pattern
-        ttk.Label(ctrl_panel, text="Search Pattern Spacing:", font=("Segoe UI", 10, "bold")).pack(anchor="w", pady=(10, 4))
+        tk.Label(drone_content_frame, text="PATTERN:", bg='#1e293b', fg='#cbd5e1',
+                font=("Segoe UI", 9, "bold")).pack(anchor="w", pady=(4, 4))
         self.pattern_var = tk.StringVar(value="10m")
-        pattern_frame = tk.Frame(ctrl_panel, bg='#1f2937')
+        pattern_frame = tk.Frame(drone_content_frame, bg='#1e293b')
         pattern_frame.pack(fill=tk.X)
         
-        tk.Radiobutton(pattern_frame, text="5m grid (Dense)", variable=self.pattern_var, value="5m",
-                      bg='#1f2937', fg='#e5e7eb', selectcolor="#1f2937", font=("Segoe UI", 10),
-                      command=self.update_search_pattern).pack(side=tk.LEFT, padx=(0, 10))
-        tk.Radiobutton(pattern_frame, text="10m grid (Normal)", variable=self.pattern_var, value="10m",
-                      bg='#1f2937', fg='#e5e7eb', selectcolor="#1f2937", font=("Segoe UI", 10),
-                      command=self.update_search_pattern).pack(side=tk.LEFT, padx=10)
-        tk.Radiobutton(pattern_frame, text="15m grid (Fast)", variable=self.pattern_var, value="15m",
-                      bg='#1f2937', fg='#e5e7eb', selectcolor="#1f2937", font=("Segoe UI", 10),
-                      command=self.update_search_pattern).pack(side=tk.LEFT, padx=10)
+        tk.Radiobutton(pattern_frame, text="5m", variable=self.pattern_var, value="5m",
+                      bg='#1e293b', fg='#e2e8f0', selectcolor="#0f172a", font=("Segoe UI", 9),
+                      activebackground='#334155', activeforeground='#f1f5f9',
+                      command=self.update_search_pattern).pack(side=tk.LEFT, padx=(0, 8))
+        tk.Radiobutton(pattern_frame, text="10m", variable=self.pattern_var, value="10m",
+                      bg='#1e293b', fg='#e2e8f0', selectcolor="#0f172a", font=("Segoe UI", 9),
+                      activebackground='#334155', activeforeground='#f1f5f9',
+                      command=self.update_search_pattern).pack(side=tk.LEFT, padx=8)
+        tk.Radiobutton(pattern_frame, text="15m", variable=self.pattern_var, value="15m",
+                      bg='#1e293b', fg='#e2e8f0', selectcolor="#0f172a", font=("Segoe UI", 9),
+                      activebackground='#334155', activeforeground='#f1f5f9',
+                      command=self.update_search_pattern).pack(side=tk.LEFT, padx=8)
         
-        # Mission Log
-        log_frame = ttk.LabelFrame(self.mission_frame, text="Mission Log", padding=6)
-        log_frame.grid(row=1, column=0, sticky='nsew', padx=4)
-        self.log_box = scrolledtext.ScrolledText(log_frame, bg="#f7f9fb", fg="#1e2a38", font=("Consolas", 10), wrap=tk.WORD)
-        self.log_box.pack(fill=tk.BOTH, expand=True)
+        # HUSKY Firefighter Control Panel (Dark Theme) - RIGHT
+        husky_ctrl_panel = tk.Frame(self.mission_frame, bg='#1e293b', relief='ridge', bd=2)
+        husky_ctrl_panel.grid(row=0, column=1, sticky='ew', padx=(2, 4), pady=(0, 8))
+        
+        # Header
+        husky_header_frame = tk.Frame(husky_ctrl_panel, bg='#334155', height=40)
+        husky_header_frame.pack(fill=tk.X, padx=0, pady=0)
+        tk.Label(husky_header_frame, text="HUSKY FIREFIGHTER", bg='#334155', fg='#f1f5f9',
+                font=("Segoe UI", 12, "bold")).pack(pady=8)
+        
+        # Content area - HUSKY
+        husky_content_frame = tk.Frame(husky_ctrl_panel, bg='#1e293b')
+        husky_content_frame.pack(fill=tk.X, padx=12, pady=12)
+        
+        # Firefighter buttons
+        husky_btn_frame = tk.Frame(husky_content_frame, bg='#1e293b')
+        husky_btn_frame.pack(fill=tk.X, pady=(0, 12))
+        
+        self.firefighter_start_btn = tk.Button(husky_btn_frame, text="▶ START", bg="#10b981", fg="white",
+                                               font=("Segoe UI", 10, "bold"), relief="flat", padx=20, pady=8,
+                                               command=self.start_firefighter, cursor="hand2", state='normal')
+        self.firefighter_start_btn.pack(side=tk.LEFT, padx=(0, 6))
+        
+        self.firefighter_stop_btn = tk.Button(husky_btn_frame, text="⏸ PAUSE", bg="#f59e0b", fg="white",
+                                              font=("Segoe UI", 10, "bold"), relief="flat", padx=20, pady=8,
+                                              command=self.stop_firefighter, cursor="hand2", state='disabled')
+        self.firefighter_stop_btn.pack(side=tk.LEFT)
+        
+        # Status display
+        husky_status_frame = tk.Frame(husky_content_frame, bg='#0f172a', relief='solid', bd=1)
+        husky_status_frame.pack(fill=tk.X, pady=(0, 8))
+        self.firefighter_status_var = tk.StringVar(value="Status: Inactive")
+        tk.Label(husky_status_frame, textvariable=self.firefighter_status_var, bg='#0f172a', fg='#94a3b8',
+                font=("Segoe UI", 9, "bold")).pack(pady=6, padx=8, anchor='w')
+        
+        # Info text
+        info_text = "Autonomous fire\nextinguishing mode.\nPauses with teleop."
+        tk.Label(husky_content_frame, text=info_text, bg='#1e293b', fg='#64748b',
+                font=("Segoe UI", 8), justify=tk.LEFT).pack(anchor="w", pady=(4, 0))
+        
+        # Mission Log (Dark Theme)
+        log_outer = tk.Frame(self.mission_frame, bg='#1e293b', relief='ridge', bd=2)
+        log_outer.grid(row=1, column=0, columnspan=2, sticky='nsew', padx=4)
+        
+        log_header = tk.Frame(log_outer, bg='#334155', height=35)
+        log_header.pack(fill=tk.X)
+        tk.Label(log_header, text="MISSION LOG", bg='#334155', fg='#f1f5f9',
+                font=("Segoe UI", 11, "bold")).pack(pady=6)
+        
+        log_content = tk.Frame(log_outer, bg='#0f172a')
+        log_content.pack(fill=tk.BOTH, expand=True, padx=2, pady=2)
+        
+        self.log_box = scrolledtext.ScrolledText(log_content, bg="#0f172a", fg="#e2e8f0", 
+                                                 font=("Consolas", 10), wrap=tk.WORD,
+                                                 insertbackground='#94a3b8', relief='flat')
+        self.log_box.pack(fill=tk.BOTH, expand=True, padx=4, pady=4)
         self.log_box.config(state="disabled")
     
     def _build_maps_tab(self):
-        """Build the Maps tab: Full-screen 2D terrain map"""
-        self.maps_frame.columnconfigure(0, weight=1)
+        """Build the Maps tab: Full-screen 2D terrain map with fire position list"""
+        self.maps_frame.configure(style='Dark.TFrame')
+        self.maps_frame.columnconfigure(0, weight=4)
+        self.maps_frame.columnconfigure(1, weight=1)
         self.maps_frame.rowconfigure(0, weight=1)
         
-        terrain_frame = ttk.LabelFrame(self.maps_frame, text="2D Terrain Map - Robot Positions & Fire Locations", padding=6)
-        terrain_frame.grid(row=0, column=0, sticky='nsew', padx=4, pady=4)
+        # LEFT: 2D Terrain Map (Dark Theme)
+        terrain_outer = tk.Frame(self.maps_frame, bg='#1e293b', relief='ridge', bd=2)
+        terrain_outer.grid(row=0, column=0, sticky='nsew', padx=(4, 2), pady=4)
         
-        self.fig, self.ax = plt.subplots(figsize=(12, 7))
-        self.ax.set_facecolor("#ffffff")
+        terrain_header = tk.Frame(terrain_outer, bg='#334155', height=35)
+        terrain_header.pack(fill=tk.X)
+        tk.Label(terrain_header, text="2D TERRAIN MAP - POSITIONS & FIRES", bg='#334155', fg='#f1f5f9',
+                font=("Segoe UI", 11, "bold")).pack(pady=6)
+        
+        terrain_content = tk.Frame(terrain_outer, bg='#0f172a')
+        terrain_content.pack(fill=tk.BOTH, expand=True, padx=2, pady=2)
+        
+        self.fig, self.ax = plt.subplots(figsize=(10, 7), facecolor='#1e293b')
+        # Make room on the right for an external legend (map key)
+        try:
+            self.fig.subplots_adjust(right=0.82)
+        except Exception:
+            pass
+        self.ax.set_facecolor("#0f172a")
         self.ax.set_xlim(-self.world_size/2, self.world_size/2)
         self.ax.set_ylim(-self.world_size/2, self.world_size/2)
-        self.ax.grid(True, alpha=0.3)
-        self.canvas = FigureCanvasTkAgg(self.fig, master=terrain_frame)
-        self.canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
+        self.ax.grid(True, alpha=0.2, color='#475569')
+        self.ax.tick_params(colors='#94a3b8', labelsize=8)
+        self.ax.spines['bottom'].set_color('#475569')
+        self.ax.spines['top'].set_color('#475569')
+        self.ax.spines['left'].set_color('#475569')
+        self.ax.spines['right'].set_color('#475569')
+        self.canvas = FigureCanvasTkAgg(self.fig, master=terrain_content)
+        self.canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True, padx=4, pady=4)
+        
+        # RIGHT: Fire Positions List (Dark Theme)
+        fire_list_outer = tk.Frame(self.maps_frame, bg='#1e293b', relief='ridge', bd=2)
+        fire_list_outer.grid(row=0, column=1, sticky='nsew', padx=(2, 4), pady=4)
+        
+        fire_list_header = tk.Frame(fire_list_outer, bg='#334155', height=35)
+        fire_list_header.pack(fill=tk.X)
+        tk.Label(fire_list_header, text="ACTIVE FIRES", bg='#334155', fg='#f1f5f9',
+                font=("Segoe UI", 11, "bold")).pack(pady=6)
+        
+        fire_list_content = tk.Frame(fire_list_outer, bg='#0f172a')
+        fire_list_content.pack(fill=tk.BOTH, expand=True, padx=2, pady=2)
+        
+        # Fire count label
+        self.fire_list_count_var = tk.StringVar(value="Total Fires: 0")
+        count_frame = tk.Frame(fire_list_content, bg='#1e293b', relief='solid', bd=1)
+        count_frame.pack(fill=tk.X, padx=6, pady=6)
+        tk.Label(count_frame, textvariable=self.fire_list_count_var, bg='#1e293b', fg='#fbbf24',
+                font=("Segoe UI", 11, "bold")).pack(pady=6)
+        
+        # Scrollable container for fire boxes
+        scroll_canvas = tk.Canvas(fire_list_content, bg='#0f172a', highlightthickness=0)
+        scrollbar = tk.Scrollbar(fire_list_content, orient="vertical", command=scroll_canvas.yview)
+        self.fire_boxes_frame = tk.Frame(scroll_canvas, bg='#0f172a')
+        
+        self.fire_boxes_frame.bind(
+            "<Configure>",
+            lambda e: scroll_canvas.configure(scrollregion=scroll_canvas.bbox("all"))
+        )
+        
+        scroll_canvas.create_window((0, 0), window=self.fire_boxes_frame, anchor="nw")
+        scroll_canvas.configure(yscrollcommand=scrollbar.set)
+        
+        scroll_canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=6, pady=6)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
     
     def switch_tab(self, tab_name):
         """Switch between different tabs"""
@@ -478,7 +705,7 @@ class SteamDeckGui(Node):
 
     def _toggle_rgb_camera(self):
         self.active_rgb_camera = 'drone' if self.active_rgb_camera == 'husky' else 'husky'
-        label = f"View: {self.active_rgb_camera.capitalize()} RGB"
+        label = f"VIEW: {self.active_rgb_camera.upper()} RGB"
         self.cam_toggle_btn.config(text=label)
         self.log(f"Camera: {self.active_rgb_camera.capitalize()} RGB")
 
@@ -494,26 +721,56 @@ class SteamDeckGui(Node):
         self.log(f"Mode: {self.current_mode.upper()}")
     
     def start_fire_scan(self):
-        """Start the fire scanning pattern"""
+        """Start the fire scanning pattern (Drone)"""
         msg = Bool()
         msg.data = True
         self.fire_scan_pub.publish(msg)
         self.scan_active = True
         self.scan_start_btn.config(state='disabled')
         self.scan_stop_btn.config(state='normal')
-        self.scan_status_var.set("Scan: Active")
-        self.log("Fire scan started")
+        self.scan_status_var.set("Status: Active")
+        self.log("Drone fire scan started")
     
     def stop_fire_scan(self):
-        """Stop the fire scanning pattern"""
+        """Stop the fire scanning pattern (Drone)"""
         msg = Bool()
         msg.data = False
         self.fire_scan_pub.publish(msg)
         self.scan_active = False
         self.scan_start_btn.config(state='normal')
         self.scan_stop_btn.config(state='disabled')
-        self.scan_status_var.set("Scan: Paused")
-        self.log("Fire scan paused")
+        self.scan_status_var.set("Status: Paused")
+        self.log("Drone fire scan paused")
+    
+    def start_firefighter(self):
+        """Start the autonomous firefighter (Husky)"""
+        try:
+            msg = Bool()
+            msg.data = True
+            self.firefighter_pub.publish(msg)
+            self.firefighter_active = True
+            self.firefighter_start_btn.config(state='disabled')
+            self.firefighter_stop_btn.config(state='normal')
+            self.firefighter_status_var.set("Status: Active")
+            self.log("Husky firefighter started")
+            self.get_logger().info(f"Published START command to /husky/firefighter/start")
+        except Exception as e:
+            self.get_logger().error(f"Error starting firefighter: {e}")
+    
+    def stop_firefighter(self):
+        """Stop the autonomous firefighter (Husky)"""
+        try:
+            msg = Bool()
+            msg.data = False
+            self.firefighter_pub.publish(msg)
+            self.firefighter_active = False
+            self.firefighter_start_btn.config(state='normal')
+            self.firefighter_stop_btn.config(state='disabled')
+            self.firefighter_status_var.set("Status: Paused")
+            self.log("Husky firefighter paused")
+            self.get_logger().info(f"Published PAUSE command to /husky/firefighter/start")
+        except Exception as e:
+            self.get_logger().error(f"Error stopping firefighter: {e}")
     
     def update_search_pattern(self):
         """Update search pattern spacing"""
@@ -589,7 +846,7 @@ class SteamDeckGui(Node):
         # This message is now redundant since we get fire info from status topic
         self.update_status_panel()
 
-    def _on_firefighter_status(self, msg: ROSString):
+    def _on_firefighter_status_string(self, msg: ROSString):
         """
         Parse firefighter status message format:
         STATE|BATTERY|DETECTED|EXTINGUISHED|SINCE_CHARGE|TARGET_X,TARGET_Y|AT_BASE
@@ -684,7 +941,7 @@ class SteamDeckGui(Node):
             pass
     
     def _on_scan_status(self, msg: Bool):
-        """Update scan status from fire scan node"""
+        """Update scan status from fire scan node (Drone)"""
         try:
             was_active = self.scan_active
             self.scan_active = msg.data
@@ -692,17 +949,42 @@ class SteamDeckGui(Node):
             if self.scan_active:
                 self.scan_start_btn.config(state='disabled')
                 self.scan_stop_btn.config(state='normal')
-                self.scan_status_var.set("Scan: Active")
+                self.scan_status_var.set("Status: Active")
                 if not was_active:
-                    self.log("Fire scan resumed")
+                    self.log("Drone scan resumed")
             else:
                 self.scan_start_btn.config(state='normal')
                 self.scan_stop_btn.config(state='disabled')
-                self.scan_status_var.set("Scan: Paused")
+                self.scan_status_var.set("Status: Paused")
                 if was_active:
-                    self.log("Fire scan auto-paused")
+                    self.log("Drone scan auto-paused")
         except Exception as e:
             self.get_logger().warn(f"Scan status callback error: {e}")
+    
+    def _on_firefighter_status_bool(self, msg: Bool):
+        """Update firefighter status from autonomous firefighter node (Husky)
+        Note: This callback receives messages on the same topic we publish to.
+        We ignore our own messages by tracking state locally."""
+        try:
+            # Only update if the state actually changed and it's not our own message
+            if msg.data != self.firefighter_active:
+                was_active = self.firefighter_active
+                self.firefighter_active = msg.data
+                
+                if self.firefighter_active:
+                    self.firefighter_start_btn.config(state='disabled')
+                    self.firefighter_stop_btn.config(state='normal')
+                    self.firefighter_status_var.set("Status: Active")
+                    if not was_active:
+                        self.log("Husky firefighter resumed (by teleop)")
+                else:
+                    self.firefighter_start_btn.config(state='normal')
+                    self.firefighter_stop_btn.config(state='disabled')
+                    self.firefighter_status_var.set("Status: Paused")
+                    if was_active:
+                        self.log("Husky firefighter paused (by teleop)")
+        except Exception as e:
+            self.get_logger().warn(f"Firefighter status callback error: {e}")
 
     def _on_joy(self, msg: Joy):
         try:
@@ -777,15 +1059,15 @@ class SteamDeckGui(Node):
                 self.ax.text(x, y + 0.7, f"D({x:.1f},{y:.1f})", fontsize=8, ha='center')
 
             # fires (filter out extinguished ones)
+            active_fires = []
             if self.fire_positions:
                 # Filter out extinguished fires
-                active_fires = []
                 for fire in self.fire_positions:
                     is_extinguished = False
                     for ext_fire in self.extinguished_fire_positions:
-                        # Check if this fire matches an extinguished one (within threshold)
+                        # Check if this fire matches an extinguished one (within configured threshold)
                         dist = math.hypot(fire[0] - ext_fire[0], fire[1] - ext_fire[1])
-                        if dist < 0.5:  # Small threshold for matching
+                        if dist < self.extinguish_threshold:
                             is_extinguished = True
                             break
                     if not is_extinguished:
@@ -798,8 +1080,16 @@ class SteamDeckGui(Node):
                     for i, (px, py) in enumerate(active_fires):
                         self.ax.text(px + 0.4, py + 0.4, f"F{i+1}", color='red', weight='bold', fontsize=8)
 
-            self.ax.legend(loc='upper right')
+            # Place legend (map key) outside the plot to avoid covering fires
+            try:
+                self.ax.legend(loc='center left', bbox_to_anchor=(1.02, 0.5), borderaxespad=0.)
+            except Exception:
+                self.ax.legend(loc='upper right')
             self.canvas.draw_idle()
+            
+            # Update fire positions list
+            self._update_fire_list(active_fires)
+            
         except Exception as e:
             self.get_logger().warn(f'2D map refresh error: {e}')
         finally:
@@ -824,6 +1114,105 @@ class SteamDeckGui(Node):
             self.root.after(0, apply)
         except Exception as e:
             self.get_logger().warn(f'Failed to update label with frame: {e}')
+    
+    def _update_fire_list(self, active_fires):
+        """Update the fire positions list display with dark-themed boxes"""
+        try:
+            # Build a stable signature of active fires (rounded positions for stability)
+            sig = tuple(sorted([(round(f[0], 2), round(f[1], 2)) for f in active_fires]))
+
+            # Update count label only if changed
+            fire_count = len(active_fires)
+            if self._fire_list_count != fire_count:
+                self._fire_list_count = fire_count
+                self.fire_list_count_var.set(f"TOTAL: {fire_count} FIRE{'S' if fire_count != 1 else ''}")
+
+            # If signature unchanged, skip rebuilding to avoid flashing
+            if sig == self._fire_list_signature:
+                return
+
+            # Cache new signature
+            self._fire_list_signature = sig
+
+            # Clear and rebuild boxes only when data actually changes
+            for widget in self.fire_boxes_frame.winfo_children():
+                widget.destroy()
+
+            if fire_count == 0:
+                # No fires message
+                no_fire_frame = tk.Frame(self.fire_boxes_frame, bg='#1e293b', relief='solid', bd=1)
+                no_fire_frame.pack(fill=tk.X, pady=4)
+                tk.Label(no_fire_frame, text="NO ACTIVE FIRES", bg='#1e293b', fg='#10b981',
+                        font=("Segoe UI", 11, "bold")).pack(pady=8)
+                tk.Label(no_fire_frame, text="All fires extinguished\nor none detected", 
+                        bg='#1e293b', fg='#94a3b8', font=("Segoe UI", 9)).pack(pady=(0, 8))
+                return
+
+            # Sort fires by distance from origin for consistent ordering
+            sorted_fires = sorted(active_fires, key=lambda f: (f[0]**2 + f[1]**2)**0.5)
+
+            for i, (fx, fy) in enumerate(sorted_fires, 1):
+                # Calculate distance from origin
+                dist = math.hypot(fx, fy)
+
+                # Create fire box with gradient-like appearance
+                fire_box = tk.Frame(self.fire_boxes_frame, bg='#dc2626', relief='raised', bd=0)
+                fire_box.pack(fill=tk.X, pady=4, ipady=1, ipadx=1)
+
+                # Inner content frame
+                fire_content = tk.Frame(fire_box, bg='#1e293b')
+                fire_content.pack(fill=tk.BOTH, expand=True, padx=1, pady=1)
+
+                # Fire header with number
+                header = tk.Frame(fire_content, bg='#991b1b', height=28)
+                header.pack(fill=tk.X)
+                header.pack_propagate(False)
+                tk.Label(header, text=f"FIRE {i}", bg='#991b1b', fg='#fef2f2',
+                        font=("Segoe UI", 10, "bold")).pack(pady=4)
+
+                # Fire details
+                details = tk.Frame(fire_content, bg='#1e293b')
+                details.pack(fill=tk.BOTH, expand=True, padx=8, pady=6)
+
+                # Position
+                pos_frame = tk.Frame(details, bg='#0f172a', relief='flat')
+                pos_frame.pack(fill=tk.X, pady=2)
+                tk.Label(pos_frame, text="POSITION:", bg='#0f172a', fg='#94a3b8',
+                        font=("Consolas", 8, "bold"), anchor='w').pack(side=tk.LEFT, padx=4, pady=2)
+                tk.Label(pos_frame, text=f"({fx:.2f}, {fy:.2f})", bg='#0f172a', fg='#e2e8f0',
+                        font=("Consolas", 9), anchor='e').pack(side=tk.RIGHT, padx=4, pady=2)
+
+                # Distance from origin
+                dist_frame = tk.Frame(details, bg='#0f172a', relief='flat')
+                dist_frame.pack(fill=tk.X, pady=2)
+                tk.Label(dist_frame, text="DISTANCE:", bg='#0f172a', fg='#94a3b8',
+                        font=("Consolas", 8, "bold"), anchor='w').pack(side=tk.LEFT, padx=4, pady=2)
+                tk.Label(dist_frame, text=f"{dist:.2f}m", bg='#0f172a', fg='#fbbf24',
+                        font=("Consolas", 9, "bold"), anchor='e').pack(side=tk.RIGHT, padx=4, pady=2)
+
+                # Add distance from Husky if available
+                if self.positions.get('husky'):
+                    hx, hy = self.positions['husky']
+                    husky_dist = math.hypot(fx - hx, fy - hy)
+
+                    husky_frame = tk.Frame(details, bg='#0f172a', relief='flat')
+                    husky_frame.pack(fill=tk.X, pady=2)
+                    tk.Label(husky_frame, text="FROM HUSKY:", bg='#0f172a', fg='#94a3b8',
+                            font=("Consolas", 8, "bold"), anchor='w').pack(side=tk.LEFT, padx=4, pady=2)
+
+                    # Color code based on distance
+                    if husky_dist < 5:
+                        color = '#10b981'  # Green - very close
+                    elif husky_dist < 10:
+                        color = '#fbbf24'  # Yellow - close
+                    else:
+                        color = '#ef4444'  # Red - far
+
+                    tk.Label(husky_frame, text=f"{husky_dist:.2f}m", bg='#0f172a', fg=color,
+                            font=("Consolas", 9, "bold"), anchor='e').pack(side=tk.RIGHT, padx=4, pady=2)
+            
+        except Exception as e:
+            self.get_logger().warn(f'Failed to update fire list: {e}')
 
     # ---------------- Status & Logging ----------------
     def log(self, text: str):
@@ -843,16 +1232,16 @@ class SteamDeckGui(Node):
     def update_status_panel(self):
         # Firefighter state
         try:
-            self.state_var.set(f"State: {self.firefighter_state}")
+            self.state_var.set(f"{self.firefighter_state}")
         except Exception:
-            self.state_var.set("State: UNKNOWN")
+            self.state_var.set("UNKNOWN")
         
         # Fire statistics from firefighter status
         try:
-            self.fire_count_var.set(f"Detected: {self.fires_detected}")
-            self.extinguished_var.set(f"Extinguished: {self.fires_extinguished}")
-            self.since_charge_var.set(f"Since charge: {self.fires_since_charge}")
-            self.target_var.set(f"Target: {self.target_coords}")
+            self.fire_count_var.set(f"{self.fires_detected}")
+            self.extinguished_var.set(f"{self.fires_extinguished}")
+            self.since_charge_var.set(f"{self.fires_since_charge}")
+            self.target_var.set(f"{self.target_coords}")
         except Exception:
             pass
 
@@ -861,13 +1250,22 @@ class SteamDeckGui(Node):
             if self.batteries.get('husky') is not None:
                 batt_val = float(self.batteries['husky'])
                 self.husky_batt_pb['value'] = max(0, min(100, batt_val))
-                self.batt_label.config(text=f"{batt_val:.1f}%")
+                
+                # Color code battery level
+                if batt_val > 50:
+                    batt_color = '#10b981'  # Green
+                elif batt_val > 20:
+                    batt_color = '#fbbf24'  # Yellow
+                else:
+                    batt_color = '#ef4444'  # Red
+                
+                self.batt_label.config(text=f"{batt_val:.1f}%", fg=batt_color)
         except Exception:
             pass
 
         # sensor health
         health_str = "OK" if all(self.sensor_health.values()) else "DEGRADED"
-        self.sensor_health_var.set(f"Sensors: {health_str}")
+        self.sensor_health_var.set(f"{health_str}")
 
     def _status_tick(self):
         try:

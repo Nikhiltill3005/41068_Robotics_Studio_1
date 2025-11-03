@@ -31,7 +31,8 @@ from nav2_msgs.srv import ClearEntireCostmap
 from std_srvs.srv import Empty
 from geometry_msgs.msg import PoseArray, Pose, PoseStamped, Point, Twist
 from nav_msgs.msg import Odometry
-from std_msgs.msg import Header, ColorRGBA, Float32, String
+from std_msgs.msg import Header, ColorRGBA, Float32, String, Bool
+from sensor_msgs.msg import Joy
 from visualization_msgs.msg import Marker, MarkerArray
 import math
 from enum import Enum
@@ -61,7 +62,7 @@ class AutonomousFirefighter(Node):
         self.declare_parameter('target_distance', 0.75)  # Target distance from fire (meters) - increased for safety
         self.declare_parameter('distance_tolerance', 0.4)  # Tolerance for positioning
         self.declare_parameter('extinguish_duration', 3.0)  # How long to extinguish (seconds)
-        self.declare_parameter('auto_start', True)  # Auto-start firefighting
+        self.declare_parameter('auto_start', False)  # Auto-start firefighting (changed to False for manual control)
         self.declare_parameter('min_wait_time', 5.0)  # Wait time in IDLE before checking again
         self.declare_parameter('stuck_timeout', 8.0)  # Time stuck before giving up (seconds)
         self.declare_parameter('stuck_velocity_threshold', 0.05)  # Velocity threshold for stuck detection (m/s)
@@ -99,6 +100,11 @@ class AutonomousFirefighter(Node):
         # State machine
         self.state = FirefighterState.IDLE
         self.previous_state = None
+        
+        # Manual control flags
+        self.firefighting_active = False  # Manual start/stop control
+        self.teleop_active = False  # Teleop interruption flag
+        self.paused_by_teleop = False  # Track if paused by teleop
 
         # Fire tracking
         self.detected_fires = []  # List of fire Poses from drone
@@ -164,6 +170,22 @@ class AutonomousFirefighter(Node):
             self.odom_callback,
             10
         )
+        
+        # Control subscription for manual start/stop
+        self.control_sub = self.create_subscription(
+            Bool,
+            '/husky/firefighter/start',
+            self.control_callback,
+            10
+        )
+        
+        # Teleop/Joy subscription for interruption
+        self.joy_sub = self.create_subscription(
+            Joy,
+            '/joy',
+            self.joy_callback,
+            10
+        )
 
         # Publishers
         self.extinguish_marker_pub = self.create_publisher(
@@ -198,6 +220,13 @@ class AutonomousFirefighter(Node):
             '/firefighter/status_steamdeck',
             10
         )
+        
+        # Status publisher for GUI feedback (uses same topic as commands, like drone)
+        self.firefighter_status_pub = self.create_publisher(
+            Bool,
+            '/husky/firefighter/start',
+            10
+        )
 
         # State machine timer
         self.state_machine_timer = self.create_timer(0.1, self.state_machine_update)
@@ -219,7 +248,11 @@ class AutonomousFirefighter(Node):
         # Scan world for fire entities
         self.scan_world_for_fires()
         
+        self.get_logger().info('Autonomous Firefighter ready. Send True to /husky/firefighter/start to begin.')
         self.get_logger().info('Waiting for fire locations from drone...')
+
+        # Publish explicit inactive status shortly after startup so GUI shows Paused/Inactive
+        self.initial_status_timer = self.create_timer(0.25, self.publish_initial_inactive_status)
 
     def scan_world_for_fires(self):
         """Scan the world for test_fire entities and store their positions using ign service"""
@@ -407,6 +440,85 @@ class AutonomousFirefighter(Node):
             self.get_logger().error(f'Exception while deleting {fire_name}: {str(e)}')
             return False
 
+    def control_callback(self, msg):
+        """Handle manual start/stop commands (matches drone fire scan pattern)"""
+        self.get_logger().info(f'Received control command: {msg.data}')
+        requested_state = msg.data
+        
+        if requested_state and not self.firefighting_active:
+            # Start firefighting
+            self.firefighting_active = True
+            self.get_logger().info('=== Firefighting STARTED by manual command ===')
+            
+            # If we have fires and are IDLE, start planning
+            if len(self.detected_fires) > 0 and self.state == FirefighterState.IDLE:
+                self.get_logger().info(f'Starting firefighting operations with {len(self.detected_fires)} fires')
+                self.transition_to_state(FirefighterState.PLANNING)
+            else:
+                self.get_logger().info(f'Firefighting active but no fires yet (state: {self.state.name})')
+                
+        elif not requested_state and self.firefighting_active:
+            # Stop/pause firefighting
+            self.firefighting_active = False
+            self.get_logger().info('=== Firefighting PAUSED by manual command ===')
+            
+            # Cancel any active navigation
+            if self.current_goal_handle is not None:
+                self.get_logger().info('Canceling active navigation goal')
+                self.current_goal_handle.cancel_goal_async()
+                self.current_goal_handle = None
+            
+            # Return to IDLE if not in critical states
+            if self.state not in [FirefighterState.CHARGING, FirefighterState.RETURNING_TO_BASE]:
+                self.get_logger().info('Returning to IDLE state')
+                self.transition_to_state(FirefighterState.IDLE)
+    
+    def joy_callback(self, msg):
+        """Handle joystick input for teleop interruption"""
+        try:
+            # Check if LB (button 4) or RB (button 5) are pressed
+            lb_pressed = msg.buttons[4] == 1 if len(msg.buttons) > 4 else False
+            rb_pressed = msg.buttons[5] == 1 if len(msg.buttons) > 5 else False
+            
+            is_active = lb_pressed or rb_pressed
+            
+            if is_active and not self.teleop_active:
+                # Teleop just activated - pause firefighting
+                self.teleop_active = True
+                if self.firefighting_active and self.state not in [FirefighterState.IDLE, FirefighterState.CHARGING]:
+                    self.paused_by_teleop = True
+                    self.get_logger().info('Teleop activated - Pausing firefighting operations')
+                    
+                    # Publish paused status to GUI
+                    status_msg = Bool()
+                    status_msg.data = False
+                    self.firefighter_status_pub.publish(status_msg)
+                    
+                    # Cancel active navigation
+                    if self.current_goal_handle is not None:
+                        self.current_goal_handle.cancel_goal_async()
+                        self.current_goal_handle = None
+                        
+            elif not is_active and self.teleop_active:
+                # Teleop just deactivated - resume if it was paused by teleop
+                self.teleop_active = False
+                if self.paused_by_teleop and self.firefighting_active:
+                    self.paused_by_teleop = False
+                    self.get_logger().info('Teleop deactivated - Resuming firefighting operations')
+                    
+                    # Publish resumed status to GUI
+                    status_msg = Bool()
+                    status_msg.data = True
+                    self.firefighter_status_pub.publish(status_msg)
+                    
+                    # Resume operations if we were in the middle of something
+                    if self.state == FirefighterState.NAVIGATING:
+                        # Re-plan to current target or next fire
+                        self.transition_to_state(FirefighterState.PLANNING)
+                        
+        except Exception as e:
+            self.get_logger().warn(f'Joy callback error: {e}')
+
     def fire_callback(self, msg):
         """Update list of detected fires from drone"""
         self.last_fire_update_time = time.time()
@@ -429,16 +541,17 @@ class AutonomousFirefighter(Node):
 
         self.detected_fires = new_fires
 
-        # If we're IDLE and have fires, transition to PLANNING
+        # Only auto-start if firefighting is active and enabled
         if self.state == FirefighterState.IDLE and len(self.detected_fires) > 0:
-            if self.auto_start:
+            if self.firefighting_active:
                 self.get_logger().info('Fires detected! Starting firefighting operations.')
                 self.transition_to_state(FirefighterState.PLANNING)
         
-        # If we're COMPLETED and new fires detected, resume operations immediately
+        # If we're COMPLETED and new fires detected, resume if active
         elif self.state == FirefighterState.COMPLETED and len(self.detected_fires) > 0:
-            self.get_logger().info('New fire(s) detected while COMPLETED! Resuming operations immediately.')
-            self.transition_to_state(FirefighterState.PLANNING)
+            if self.firefighting_active:
+                self.get_logger().info('New fire(s) detected while COMPLETED! Resuming operations.')
+                self.transition_to_state(FirefighterState.PLANNING)
 
     def odom_callback(self, msg):
         """Update robot position and velocity"""
@@ -558,6 +671,10 @@ class AutonomousFirefighter(Node):
         """Main state machine update loop"""
         if self.robot_position is None:
             return  # Wait for robot position
+        
+        # Check if paused by teleop - don't process state machine
+        if self.teleop_active and self.paused_by_teleop:
+            return
 
         # State machine logic
         if self.state == FirefighterState.IDLE:
@@ -583,7 +700,7 @@ class AutonomousFirefighter(Node):
         time_in_state = time.time() - self.state_start_time
 
         if len(self.detected_fires) > 0 and time_in_state > self.min_wait_time:
-            if self.auto_start:
+            if self.firefighting_active:
                 self.transition_to_state(FirefighterState.PLANNING)
 
     def handle_planning_state(self):
@@ -786,6 +903,19 @@ class AutonomousFirefighter(Node):
             self.get_logger().info(
                 f'Fire EXTINGUISHED! Total: {len(self.extinguished_fires)} (Since charge: {self.fires_since_charge}/{self.fires_per_charge})'
             )
+
+            # Immediately remove matching entries from detected_fires to avoid replanning same fire
+            before = len(self.detected_fires)
+            self.detected_fires = [
+                f for f in self.detected_fires
+                if math.sqrt(
+                    (f.position.x - fire_pos[0])**2 +
+                    (f.position.y - fire_pos[1])**2
+                ) >= self.fire_match_tolerance
+            ]
+            removed = before - len(self.detected_fires)
+            if removed > 0:
+                self.get_logger().info(f'Removed {removed} matching fire(s) from detected list')
 
             # Find and delete the fire entity from simulation
             fire_name = self.find_fire_entity_name(self.current_target_fire.position)
@@ -1258,6 +1388,20 @@ class AutonomousFirefighter(Node):
         battery_msg = Float32()
         battery_msg.data = self.battery_level
         self.battery_pub.publish(battery_msg)
+
+    def publish_initial_inactive_status(self):
+        """Publish a one-time inactive status to align GUI on startup"""
+        try:
+            msg = Bool()
+            msg.data = False
+            self.firefighter_status_pub.publish(msg)
+        except Exception:
+            pass
+        # Cancel this one-shot timer
+        try:
+            self.initial_status_timer.cancel()
+        except Exception:
+            pass
 
     def publish_status_string(self):
         """Publish simplified status string for Steam Deck or other external devices
