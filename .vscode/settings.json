@@ -3,5 +3,5 @@
         "/opt/ros/humble/lib/python3.10/site-packages",
         "/opt/ros/humble/local/lib/python3.10/dist-packages"
     ],
-    "cmake.sourceDirectory": "/home/apollo/ros2_ws/src/41068_Robotics_Studio_1/simulations/41068_ignition_bringup"
+    "cmake.sourceDirectory": "/home/odyssey/ros2_ws/src/41068_Robotics_Studio_1/simulations/41068_ignition_bringup"
 }

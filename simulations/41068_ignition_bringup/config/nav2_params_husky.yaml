@@ -144,32 +144,33 @@ controller_server:
       debug_trajectory_details: False
       min_vel_x: 0.0
       min_vel_y: 0.0
-      max_vel_x: 1.2
+      max_vel_x: 1.8
       max_vel_y: 0.0
       max_vel_theta: 12.0
       min_speed_xy: 0.0
-      max_speed_xy: 1.2
+      max_speed_xy: 1.8
       min_speed_theta: 0.4
       # VERY aggressive acceleration for sharp steering
-      acc_lim_x: 2.5
+      acc_lim_x: 3.0
       acc_lim_y: 0.0
       acc_lim_theta: 25.0
-      decel_lim_x: -2.5
+      decel_lim_x: -3.0
       decel_lim_y: 0.0
       decel_lim_theta: -25.0
       # Tank steering trajectory samples: prefer pure rotation + straight driving
-      vx_samples: 20
+      vx_samples: 12
       vy_samples: 1
-      vtheta_samples: 40
-      # Shorter simulation time for reactive tank steering
-      sim_time: 1.2
+      vtheta_samples: 24
+      # Moderate horizon to balance smoothness and compute budget
+      sim_time: 1.4
       linear_granularity: 0.05
       angular_granularity: 0.025
       transform_tolerance: 0.2
       xy_goal_tolerance: 0.7
       yaw_goal_tolerance: 0.5
       trans_stopped_velocity: 0.05
-      short_circuit_trajectory_evaluation: False
+      # Pick best candidate early to reduce oscillations
+      short_circuit_trajectory_evaluation: True
       stateful: True
       # Tank steering: rotate to align, then drive
       prune_plan: true
@@ -181,15 +182,15 @@ controller_server:
       # Very high obstacle penalty - avoid rocks!
       BaseObstacle.scale: 0.3
       BaseObstacle.sum_scores: false
-      # Heavy penalties for misalignment - forces tank steering
-      PathAlign.scale: 50.0
-      PathAlign.forward_point_distance: 0.3
-      GoalAlign.scale: 60.0
-      GoalAlign.forward_point_distance: 0.3
+      # Lower alignment weights and look farther ahead to reduce jitter
+      PathAlign.scale: 22.0
+      PathAlign.forward_point_distance: 0.5
+      GoalAlign.scale: 24.0
+      GoalAlign.forward_point_distance: 0.5
       PathDist.scale: 15.0
       GoalDist.scale: 25.0
-      # VERY HIGH rotate-to-goal priority - rotate in place first!
-      RotateToGoal.scale: 100.0
+      # Lower rotate-to-goal priority to avoid over-rotating
+      RotateToGoal.scale: 25.0
       RotateToGoal.xy_goal_tolerance: 0.7
       RotateToGoal.slowing_factor: 2.0
       RotateToGoal.lookahead_time: -1.0
@@ -408,10 +409,10 @@ velocity_smoother:
     smoothing_frequency: 20.0
     scale_velocities: False
     feedback: "OPEN_LOOP"
-    max_velocity: [1.2, 0.0, 12.0]
+    max_velocity: [1.8, 0.0, 12.0]
     min_velocity: [0.0, 0.0, -12.0]
-    max_accel: [2.5, 0.0, 25.0]
-    max_decel: [-2.5, 0.0, -25.0]
+    max_accel: [3.0, 0.0, 25.0]
+    max_decel: [-3.0, 0.0, -25.0]
     odom_topic: "/husky/odometry"
     odom_duration: 0.1
     deadband_velocity: [0.0, 0.0, 0.0]

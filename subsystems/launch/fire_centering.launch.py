@@ -10,7 +10,7 @@ def generate_launch_description():
     return LaunchDescription([
         DeclareLaunchArgument(
             'enabled',
-            default_value='false',
+            default_value='true',
             description='Enable fire centering (true/false)'
         ),
         
