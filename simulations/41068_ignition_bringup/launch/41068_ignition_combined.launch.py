@@ -142,7 +142,7 @@ def generate_launch_description():
                     'use_sim_time': use_sim_time,
                     # Common
                     'enable_button': 4,   # LB for drone
-                    'turbo_button': 5,    # RB for husky
+                    'turbo_button': 5,    # RB for huskyx``
                     'toggle_button': 3,   # Y button
                     # Husky mapping/scales
                     'husky_axis_linear_x': 1,
