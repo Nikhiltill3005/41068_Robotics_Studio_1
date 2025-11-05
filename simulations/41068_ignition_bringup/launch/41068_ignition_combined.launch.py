@@ -28,7 +28,7 @@ def generate_launch_description():
         'world',
         default_value='simple_trees',
         description='Which world to load',
-        choices=['simple_trees', 'large_demo', 'bushland']
+        choices=['simple_trees', 'large_demo', 'bushland', 'bushland_spaced']
     )
     ld.add_action(world_launch_arg)
 
@@ -142,7 +142,7 @@ def generate_launch_description():
                     'use_sim_time': use_sim_time,
                     # Common
                     'enable_button': 4,   # LB for drone
-                    'turbo_button': 5,    # RB for husky
+                    'turbo_button': 5,    # RB for huskyx``
                     'toggle_button': 3,   # Y button
                     # Husky mapping/scales
                     'husky_axis_linear_x': 1,
@@ -220,6 +220,64 @@ def generate_launch_description():
         condition=IfCondition(LaunchConfiguration('fire_search'))
     )
     ld.add_action(fire_search)
+
+    # Image compression republishers for efficient network transmission
+    # Husky RGB camera
+    husky_rgb_compress = Node(
+        package='image_transport',
+        executable='republish',
+        name='husky_rgb_compress',
+        arguments=['raw', 'compressed'],
+        remappings=[
+            ('in', '/husky/camera/image'),
+            ('out/compressed', '/husky/camera/image/compressed')
+        ],
+        parameters=[{'use_sim_time': use_sim_time}]
+    )
+    ld.add_action(husky_rgb_compress)
+
+    # Drone RGB camera
+    drone_rgb_compress = Node(
+        package='image_transport',
+        executable='republish',
+        name='drone_rgb_compress',
+        arguments=['raw', 'compressed'],
+        remappings=[
+            ('in', '/drone/camera/image'),
+            ('out/compressed', '/drone/camera/image/compressed')
+        ],
+        parameters=[{'use_sim_time': use_sim_time}]
+    )
+    ld.add_action(drone_rgb_compress)
+
+    # Drone IR camera
+    drone_ir_compress = Node(
+        package='image_transport',
+        executable='republish',
+        name='drone_ir_compress',
+        arguments=['raw', 'compressed'],
+        remappings=[
+            ('in', '/drone/ir_camera/image_raw'),
+            ('out/compressed', '/drone/ir_camera/image_raw/compressed')
+        ],
+        parameters=[{'use_sim_time': use_sim_time}]
+    )
+    ld.add_action(drone_ir_compress)
+
+    # Fire scan debug image compression (for Steam Deck video streaming)
+    # This is critical for network bandwidth over travel routers
+    fire_scan_debug_compress = Node(
+        package='image_transport',
+        executable='republish',
+        name='fire_scan_debug_compress',
+        arguments=['raw', 'compressed'],
+        remappings=[
+            ('in', '/drone/fire_scan/debug_image'),
+            ('out/compressed', '/drone/fire_scan/debug_image/compressed')
+        ],
+        parameters=[{'use_sim_time': use_sim_time}]
+    )
+    ld.add_action(fire_scan_debug_compress)
 
     return ld
 
