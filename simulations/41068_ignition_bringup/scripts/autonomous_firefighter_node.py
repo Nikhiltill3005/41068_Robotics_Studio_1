@@ -30,7 +30,7 @@ from nav2_msgs.action import NavigateToPose
 from nav2_msgs.srv import ClearEntireCostmap
 from std_srvs.srv import Empty
 from geometry_msgs.msg import PoseArray, Pose, PoseStamped, Point, Twist
-from nav_msgs.msg import Odometry
+from nav_msgs.msg import Odometry, Path
 from std_msgs.msg import Header, ColorRGBA, Float32, String, Bool
 from sensor_msgs.msg import Joy
 from visualization_msgs.msg import Marker, MarkerArray
@@ -64,7 +64,7 @@ class AutonomousFirefighter(Node):
         self.declare_parameter('extinguish_duration', 3.0)  # How long to extinguish (seconds)
         self.declare_parameter('auto_start', False)  # Auto-start firefighting (changed to False for manual control)
         self.declare_parameter('min_wait_time', 5.0)  # Wait time in IDLE before checking again
-        self.declare_parameter('stuck_timeout', 8.0)  # Time stuck before giving up (seconds)
+        self.declare_parameter('stuck_timeout', 3.0)  # Time stuck before triggering backup (seconds)
         self.declare_parameter('stuck_velocity_threshold', 0.05)  # Velocity threshold for stuck detection (m/s)
         self.declare_parameter('fallback_distance', 2.5)  # Distance to fire to consider "close enough" (meters)
         self.declare_parameter('fire_match_tolerance', 1.0)  # Distance tolerance for matching fire positions (meters)
@@ -126,6 +126,9 @@ class AutonomousFirefighter(Node):
         self.robot_linear_x = 0.0
         self.robot_linear_y = 0.0
 
+        # Nav2 path tracking for smart rotation
+        self.latest_path = None  # Store latest local plan from Nav2
+
         # Battery system
         self.battery_level = self.get_parameter('battery_capacity').value  # Start at 100%
         self.battery_capacity = self.get_parameter('battery_capacity').value
@@ -170,7 +173,15 @@ class AutonomousFirefighter(Node):
             self.odom_callback,
             10
         )
-        
+
+        # Subscribe to Nav2 local plan for smart rotation during backup
+        self.plan_sub = self.create_subscription(
+            Path,
+            '/local_plan',
+            self.plan_callback,
+            10
+        )
+
         # Control subscription for manual start/stop
         self.control_sub = self.create_subscription(
             Bool,
@@ -556,7 +567,7 @@ class AutonomousFirefighter(Node):
     def odom_callback(self, msg):
         """Update robot position and velocity"""
         current_pos = msg.pose.pose.position
-        
+
         # Track distance traveled for battery drain
         if self.last_position is not None and self.state != FirefighterState.CHARGING:
             distance = math.sqrt(
@@ -566,7 +577,7 @@ class AutonomousFirefighter(Node):
             # Drain battery based on distance
             battery_drain = distance * self.battery_drain_per_meter
             self.battery_level = max(0.0, self.battery_level - battery_drain)
-        
+
         self.last_position = current_pos
         self.robot_position = current_pos
         self.robot_orientation = msg.pose.pose.orientation
@@ -575,6 +586,10 @@ class AutonomousFirefighter(Node):
         self.robot_linear_x = msg.twist.twist.linear.x
         self.robot_linear_y = msg.twist.twist.linear.y
         self.robot_velocity = math.sqrt(self.robot_linear_x**2 + self.robot_linear_y**2)
+
+    def plan_callback(self, msg):
+        """Store latest Nav2 local plan for smart rotation during backup"""
+        self.latest_path = msg
 
     def is_fire_extinguished(self, fire_pos):
         """Check if a fire has already been extinguished"""
@@ -999,21 +1014,92 @@ class AutonomousFirefighter(Node):
                         self.state_start_time = time.time()
 
     def handle_backing_up_state(self):
-        """BACKING_UP state: Recovery maneuver to clear obstacles"""
-        time_in_state = time.time() - self.state_start_time
-        backup_duration = 5.0  # Back up for 5 seconds (aggressive)
+        """BACKING_UP state: Recovery maneuver to clear obstacles
 
-        if time_in_state < backup_duration:
-            # Publish backup velocity command
+        Multi-phase backup:
+        Phase 1 (0-5s): Reverse straight back at -1.5 m/s = 7.5m distance
+        Phase 2 (5-8s): Smart rotate to align with Nav2's planned path direction
+        Phase 3: Stop and transition back to navigation
+        """
+        time_in_state = time.time() - self.state_start_time
+        backup_phase1_duration = 5.0  # Back up for 5 seconds at 1.5 m/s = 7.5m distance
+        rotate_phase2_duration = 3.0  # Rotate for up to 3 seconds
+        total_duration = backup_phase1_duration + rotate_phase2_duration
+
+        # Track backup start position for distance measurement
+        if not hasattr(self, 'backup_start_pos') and self.robot_position:
+            self.backup_start_pos = (self.robot_position.x, self.robot_position.y)
+            self.get_logger().info(
+                f'Backup starting from position: ({self.backup_start_pos[0]:.2f}, {self.backup_start_pos[1]:.2f})'
+            )
+
+        if time_in_state < backup_phase1_duration:
+            # Phase 1: Reverse straight back
             cmd = Twist()
-            cmd.linear.x = -0.8  # Reverse at 0.8 m/s = 4m in 5 seconds (AGGRESSIVE!)
+            cmd.linear.x = -1.5  # Reverse at 1.5 m/s for faster backup (5m in 3.3s)
             cmd.angular.z = 0.0
             self.cmd_vel_pub.publish(cmd)
 
             if time_in_state < 0.5:  # Log only once at start
-                self.get_logger().info('Executing backup maneuver to clear obstacles...')
+                self.get_logger().info('Phase 1: Backing up 7.5m at 1.5 m/s to clear obstacles...')
+            elif time_in_state > backup_phase1_duration - 0.1:  # Log at end of phase 1
+                if self.robot_position and hasattr(self, 'backup_start_pos'):
+                    actual_distance = math.sqrt(
+                        (self.robot_position.x - self.backup_start_pos[0])**2 +
+                        (self.robot_position.y - self.backup_start_pos[1])**2
+                    )
+                    self.get_logger().info(
+                        f'Phase 1 complete. Actual backup distance: {actual_distance:.2f}m (target: 7.5m)'
+                    )
+
+        elif time_in_state < total_duration:
+            # Phase 2: Smart rotate toward Nav2's planned path
+            cmd = Twist()
+            cmd.linear.x = 0.0
+
+            # Calculate target angle from Nav2 path
+            target_angle = self.calculate_path_direction()
+
+            if target_angle is not None:
+                # Calculate angle difference
+                current_yaw = self.get_yaw_from_quaternion(self.robot_orientation)
+                angle_diff = self.normalize_angle(target_angle - current_yaw)
+
+                # Rotate toward target (positive = counterclockwise)
+                rotation_speed = 1.5  # rad/s
+                if abs(angle_diff) > 0.1:  # Still need to rotate
+                    cmd.angular.z = rotation_speed if angle_diff > 0 else -rotation_speed
+                else:
+                    cmd.angular.z = 0.0  # Close enough, stop rotating
+
+                if time_in_state < backup_phase1_duration + 0.5:  # Log once
+                    self.get_logger().info(
+                        f'Phase 2: Smart rotating to align with path (target: {math.degrees(target_angle):.1f}°, '
+                        f'current: {math.degrees(current_yaw):.1f}°, diff: {math.degrees(angle_diff):.1f}°)'
+                    )
+            else:
+                # No path available, rotate toward goal as fallback
+                if self.current_fire_pos:
+                    goal_angle = math.atan2(
+                        self.current_fire_pos[1] - self.robot_position.y,
+                        self.current_fire_pos[0] - self.robot_position.x
+                    )
+                    current_yaw = self.get_yaw_from_quaternion(self.robot_orientation)
+                    angle_diff = self.normalize_angle(goal_angle - current_yaw)
+                    cmd.angular.z = 1.5 if angle_diff > 0 else -1.5
+
+                    if time_in_state < backup_phase1_duration + 0.5:
+                        self.get_logger().info('Phase 2: Rotating toward goal (no path available)')
+                else:
+                    # No path, no goal - just rotate 90° as last resort
+                    cmd.angular.z = 1.5
+                    if time_in_state < backup_phase1_duration + 0.5:
+                        self.get_logger().info('Phase 2: Default rotation (no path/goal data)')
+
+            self.cmd_vel_pub.publish(cmd)
+
         else:
-            # Stop the robot
+            # Phase 3: Stop the robot completely
             cmd = Twist()
             cmd.linear.x = 0.0
             cmd.angular.z = 0.0
@@ -1022,11 +1108,21 @@ class AutonomousFirefighter(Node):
             # Increment backup counter
             self.backup_attempts += 1
 
+            # Cancel old navigation goal to force Nav2 to replan from new position
+            if self.current_goal_handle is not None:
+                self.get_logger().info('Cancelling old navigation goal to force replan...')
+                self.current_goal_handle.cancel_goal_async()
+                self.current_goal_handle = None
+
+            # Clean up backup tracking variable
+            if hasattr(self, 'backup_start_pos'):
+                delattr(self, 'backup_start_pos')
+
             self.get_logger().info(
-                f'Backup complete. Retrying navigation (backup attempt {self.backup_attempts}/{self.max_backup_attempts})...'
+                f'Backup complete (7.5m back + rotation). Forcing Nav2 replan (attempt {self.backup_attempts}/{self.max_backup_attempts})...'
             )
 
-            # Return to navigating state to retry
+            # Return to navigating state which will send fresh goal and trigger replan
             self.transition_to_state(FirefighterState.NAVIGATING)
 
     def handle_returning_to_base_state(self):
@@ -1440,8 +1536,81 @@ class AutonomousFirefighter(Node):
         
         # Build status string
         status_msg.data = f"{state_name}|{battery}|{detected}|{extinguished}|{since_charge}|{target}|{at_base}"
-        
+
         self.status_string_pub.publish(status_msg)
+
+    def calculate_path_direction(self):
+        """Calculate the direction of Nav2's planned path for smart rotation
+
+        Returns:
+            float: Target yaw angle in radians, or None if no path available
+        """
+        if self.latest_path is None or len(self.latest_path.poses) < 2:
+            return None
+
+        # Look ahead in the path to find a point at least 0.5m away
+        # Just outside robot bounding box to get immediate path direction
+        if self.robot_position is None:
+            return None
+
+        min_lookahead_distance = 0.5  # meters (just outside robot footprint)
+        target_pose = None
+
+        for pose_stamped in self.latest_path.poses:
+            pose = pose_stamped.pose
+            distance = math.sqrt(
+                (pose.position.x - self.robot_position.x)**2 +
+                (pose.position.y - self.robot_position.y)**2
+            )
+
+            if distance >= min_lookahead_distance:
+                target_pose = pose
+                break
+
+        # If no pose is far enough, use the last pose in the path
+        if target_pose is None and len(self.latest_path.poses) > 0:
+            target_pose = self.latest_path.poses[-1].pose
+
+        if target_pose is None:
+            return None
+
+        # Calculate angle from robot to target pose
+        target_angle = math.atan2(
+            target_pose.position.y - self.robot_position.y,
+            target_pose.position.x - self.robot_position.x
+        )
+
+        return target_angle
+
+    def get_yaw_from_quaternion(self, quaternion):
+        """Extract yaw angle from quaternion
+
+        Args:
+            quaternion: geometry_msgs/Quaternion
+
+        Returns:
+            float: Yaw angle in radians
+        """
+        # Convert quaternion to yaw (rotation around z-axis)
+        siny_cosp = 2.0 * (quaternion.w * quaternion.z + quaternion.x * quaternion.y)
+        cosy_cosp = 1.0 - 2.0 * (quaternion.y * quaternion.y + quaternion.z * quaternion.z)
+        yaw = math.atan2(siny_cosp, cosy_cosp)
+        return yaw
+
+    def normalize_angle(self, angle):
+        """Normalize angle to [-pi, pi]
+
+        Args:
+            angle: Angle in radians
+
+        Returns:
+            float: Normalized angle in range [-pi, pi]
+        """
+        while angle > math.pi:
+            angle -= 2.0 * math.pi
+        while angle < -math.pi:
+            angle += 2.0 * math.pi
+        return angle
 
 
 def main(args=None):
