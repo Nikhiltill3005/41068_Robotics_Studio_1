@@ -58,6 +58,8 @@ class SteamDeckGui(Node):
         self.declare_parameter('husky_cmdvel_topic', '/husky/cmd_vel')
         self.declare_parameter('drone_cmdvel_topic', '/drone/cmd_vel')
         self.declare_parameter('terrain_image', 'bushland_terrain.png')
+        # Allow forcing raw-only subscriptions for network verification/tests
+        self.declare_parameter('prefer_raw_only', True)
 
         # Read parameter values
         self.topics = {
@@ -75,6 +77,7 @@ class SteamDeckGui(Node):
         }
         self.world_size = self.get_parameter('world_size').get_parameter_value().double_value
         self.terrain_image_path = self.get_parameter('terrain_image').get_parameter_value().string_value
+        self.prefer_raw_only = self.get_parameter('prefer_raw_only').get_parameter_value().bool_value
 
         # ---------- Application state ----------
         self.bridge = CvBridge()
@@ -89,7 +92,9 @@ class SteamDeckGui(Node):
         # camera queues for latest frame only (drone_rgb, drone_ir, husky_rgb, fire_scan)
         self.camera_queues = {k: queue.Queue(maxsize=1) for k in ['drone_rgb', 'drone_ir', 'husky_rgb', 'fire_scan']}
         self.camera_enabled = {k: True for k in self.camera_queues.keys()}
-        self._throttle_n = 2
+        # Increased throttling for network bandwidth optimization (process every 4th frame instead of every 2nd)
+        # This reduces bandwidth by ~50% which is critical for travel router connections
+        self._throttle_n = 4
         self._counters = {k: 0 for k in self.camera_queues.keys()}
 
         # positions and path info
@@ -185,26 +190,34 @@ class SteamDeckGui(Node):
             depth=1
         )
 
-        # Subscribe to compressed (if publishers provide) and raw as fallback
-        try:
-            # compressed endpoints conventionally are topic + '/compressed'
-            self.create_subscription(CompressedImage, self.topics['drone_rgb'] + '/compressed',
-                                     lambda m: self._on_compressed_image(m, 'drone_rgb'), image_qos)
-        except Exception:
-            pass
+        # Subscribe to compressed (if publishers provide) unless raw-only requested
+        if not self.prefer_raw_only:
+            try:
+                # compressed endpoints conventionally are topic + '/compressed'
+                self.create_subscription(CompressedImage, self.topics['drone_rgb'] + '/compressed',
+                                         lambda m: self._on_compressed_image(m, 'drone_rgb'), image_qos)
+            except Exception:
+                pass
         self.create_subscription(ROSImage, self.topics['drone_rgb'], lambda m: self._on_image(m, 'drone_rgb'), 10)
 
-        try:
-            self.create_subscription(CompressedImage, self.topics['husky_rgb'] + '/compressed',
-                                     lambda m: self._on_compressed_image(m, 'husky_rgb'), image_qos)
-        except Exception:
-            pass
+        if not self.prefer_raw_only:
+            try:
+                self.create_subscription(CompressedImage, self.topics['husky_rgb'] + '/compressed',
+                                         lambda m: self._on_compressed_image(m, 'husky_rgb'), image_qos)
+            except Exception:
+                pass
         self.create_subscription(ROSImage, self.topics['husky_rgb'], lambda m: self._on_image(m, 'husky_rgb'), 10)
 
         # drone IR usually raw
         self.create_subscription(ROSImage, self.topics['drone_ir'], lambda m: self._on_image(m, 'drone_ir'), 10)
 
-        # Fire scan debug image - subscribe to the fire detection debug visualization
+        # Fire scan debug image - optionally compressed, raw fallback
+        if not self.prefer_raw_only:
+            try:
+                self.create_subscription(CompressedImage, '/drone/fire_scan/debug_image/compressed',
+                                         lambda m: self._on_compressed_image(m, 'fire_scan'), image_qos)
+            except Exception:
+                pass
         self.create_subscription(ROSImage, '/drone/fire_scan/debug_image', lambda m: self._on_image(m, 'fire_scan'), 10)
 
         # odometry
@@ -242,6 +255,7 @@ class SteamDeckGui(Node):
         self.root.after(1000, self._update_time_display)
 
         self.get_logger().info("SteamDeck GUI initialized with topics: %s" % self.topics)
+        self.get_logger().info(f"Image transport mode: {'RAW ONLY' if self.prefer_raw_only else 'COMPRESSED + RAW'}")
         
         # Log startup message
         self.log("Steam Deck GUI initialized - Mission started")
