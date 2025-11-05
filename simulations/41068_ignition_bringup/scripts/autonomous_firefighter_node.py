@@ -212,9 +212,20 @@ class AutonomousFirefighter(Node):
         )
 
         # cmd_vel publisher for backup recovery (only used if enable_backup_recovery=True)
+        # Publishes to /cmd_vel (not /husky/cmd_vel) to preempt Nav2 at the source
+        # The cmd_vel_relay node will forward this to /husky/cmd_vel
+        # This prevents Nav2's zero commands from competing during backup
+        # Note: Drone uses /drone/cmd_vel so this won't affect it
         self.cmd_vel_pub = self.create_publisher(
             Twist,
-            '/husky/cmd_vel',
+            '/cmd_vel',
+            10
+        )
+
+        # Extinguished fires publisher (publishes PoseArray of extinguished fire positions)
+        self.extinguished_fires_pub = self.create_publisher(
+            PoseArray,
+            '/firefighter/extinguished_fires',
             10
         )
 
@@ -919,6 +930,9 @@ class AutonomousFirefighter(Node):
                 f'Fire EXTINGUISHED! Total: {len(self.extinguished_fires)} (Since charge: {self.fires_since_charge}/{self.fires_per_charge})'
             )
 
+            # Publish updated list of extinguished fires for GUI
+            self.publish_extinguished_fires()
+
             # Immediately remove matching entries from detected_fires to avoid replanning same fire
             before = len(self.detected_fires)
             self.detected_fires = [
@@ -1017,88 +1031,113 @@ class AutonomousFirefighter(Node):
         """BACKING_UP state: Recovery maneuver to clear obstacles
 
         Multi-phase backup:
-        Phase 1 (0-5s): Reverse straight back at -1.5 m/s = 7.5m distance
-        Phase 2 (5-8s): Smart rotate to align with Nav2's planned path direction
-        Phase 3: Stop and transition back to navigation
+        Phase 1: Reverse straight back 7.5m at -2.0 m/s (completion-based)
+        Phase 2: Rotate 90 degrees at 2.5 rad/s counterclockwise (completion-based)
+        Phase 3: Stop, cancel old goal, and force Nav2 to replan from new position
         """
         time_in_state = time.time() - self.state_start_time
-        backup_phase1_duration = 5.0  # Back up for 5 seconds at 1.5 m/s = 7.5m distance
-        rotate_phase2_duration = 3.0  # Rotate for up to 3 seconds
-        total_duration = backup_phase1_duration + rotate_phase2_duration
+        backup_target_distance = 2  # meters
+        backup_speed = 3.5  # m/s (increased from 1.5 for faster recovery)
+        rotation_speed = 4.0  # rad/s (increased from 1.5 for faster rotation)
+        rotation_tolerance = 0.15  # radians (~8.6 degrees)
+        max_backup_time = 6.0  # Safety timeout for Phase 1 (reduced with faster speed)
+        max_rotation_time = 3.0  # Safety timeout for Phase 2 (reduced with faster speed)
 
-        # Track backup start position for distance measurement
+        # Track backup start position and phase
         if not hasattr(self, 'backup_start_pos') and self.robot_position:
             self.backup_start_pos = (self.robot_position.x, self.robot_position.y)
+            self.backup_phase = 0  # Start with Phase 0 (wait for Nav2 to stop)
+            self.phase_start_time = time.time()
             self.get_logger().info(
                 f'Backup starting from position: ({self.backup_start_pos[0]:.2f}, {self.backup_start_pos[1]:.2f})'
             )
+            self.get_logger().info('Waiting 0.5s for Nav2 to fully stop...')
 
-        if time_in_state < backup_phase1_duration:
-            # Phase 1: Reverse straight back
-            cmd = Twist()
-            cmd.linear.x = -1.5  # Reverse at 1.5 m/s for faster backup (5m in 3.3s)
-            cmd.angular.z = 0.0
-            self.cmd_vel_pub.publish(cmd)
+        # Phase 0: Wait for Nav2 to fully stop (0.5 second delay)
+        if hasattr(self, 'backup_phase') and self.backup_phase == 0:
+            phase_time = time.time() - self.phase_start_time
+            if phase_time >= 0.5:
+                self.get_logger().info('Nav2 stopped. Starting backup maneuver...')
+                self.backup_phase = 1
+                self.phase_start_time = time.time()
+            # Don't publish any commands during this phase - let Nav2 stop
 
-            if time_in_state < 0.5:  # Log only once at start
-                self.get_logger().info('Phase 1: Backing up 7.5m at 1.5 m/s to clear obstacles...')
-            elif time_in_state > backup_phase1_duration - 0.1:  # Log at end of phase 1
-                if self.robot_position and hasattr(self, 'backup_start_pos'):
-                    actual_distance = math.sqrt(
-                        (self.robot_position.x - self.backup_start_pos[0])**2 +
-                        (self.robot_position.y - self.backup_start_pos[1])**2
-                    )
-                    self.get_logger().info(
-                        f'Phase 1 complete. Actual backup distance: {actual_distance:.2f}m (target: 7.5m)'
-                    )
-
-        elif time_in_state < total_duration:
-            # Phase 2: Smart rotate toward Nav2's planned path
-            cmd = Twist()
-            cmd.linear.x = 0.0
-
-            # Calculate target angle from Nav2 path
-            target_angle = self.calculate_path_direction()
-
-            if target_angle is not None:
-                # Calculate angle difference
-                current_yaw = self.get_yaw_from_quaternion(self.robot_orientation)
-                angle_diff = self.normalize_angle(target_angle - current_yaw)
-
-                # Rotate toward target (positive = counterclockwise)
-                rotation_speed = 1.5  # rad/s
-                if abs(angle_diff) > 0.1:  # Still need to rotate
-                    cmd.angular.z = rotation_speed if angle_diff > 0 else -rotation_speed
-                else:
-                    cmd.angular.z = 0.0  # Close enough, stop rotating
-
-                if time_in_state < backup_phase1_duration + 0.5:  # Log once
-                    self.get_logger().info(
-                        f'Phase 2: Smart rotating to align with path (target: {math.degrees(target_angle):.1f}°, '
-                        f'current: {math.degrees(current_yaw):.1f}°, diff: {math.degrees(angle_diff):.1f}°)'
-                    )
+        # Phase 1: Reverse until target distance reached or timeout
+        elif hasattr(self, 'backup_phase') and self.backup_phase == 1:
+            # Calculate current backup distance
+            if self.robot_position and hasattr(self, 'backup_start_pos'):
+                actual_distance = math.sqrt(
+                    (self.robot_position.x - self.backup_start_pos[0])**2 +
+                    (self.robot_position.y - self.backup_start_pos[1])**2
+                )
             else:
-                # No path available, rotate toward goal as fallback
-                if self.current_fire_pos:
-                    goal_angle = math.atan2(
-                        self.current_fire_pos[1] - self.robot_position.y,
-                        self.current_fire_pos[0] - self.robot_position.x
-                    )
-                    current_yaw = self.get_yaw_from_quaternion(self.robot_orientation)
-                    angle_diff = self.normalize_angle(goal_angle - current_yaw)
-                    cmd.angular.z = 1.5 if angle_diff > 0 else -1.5
+                actual_distance = 0.0
 
-                    if time_in_state < backup_phase1_duration + 0.5:
-                        self.get_logger().info('Phase 2: Rotating toward goal (no path available)')
-                else:
-                    # No path, no goal - just rotate 90° as last resort
-                    cmd.angular.z = 1.5
-                    if time_in_state < backup_phase1_duration + 0.5:
-                        self.get_logger().info('Phase 2: Default rotation (no path/goal data)')
+            phase_time = time.time() - self.phase_start_time
 
-            self.cmd_vel_pub.publish(cmd)
+            # Log start
+            if phase_time < 0.5:
+                self.get_logger().info(f'Phase 1: Backing up {backup_target_distance}m at {backup_speed} m/s...')
 
-        else:
+            # Check if we've reached target distance or timeout
+            if actual_distance >= backup_target_distance:
+                self.get_logger().info(
+                    f'Phase 1 complete. Backed up {actual_distance:.2f}m in {phase_time:.1f}s'
+                )
+                self.backup_phase = 2
+                self.phase_start_time = time.time()
+            elif phase_time > max_backup_time:
+                self.get_logger().warn(
+                    f'Phase 1 timeout after {phase_time:.1f}s. Only backed up {actual_distance:.2f}m/{backup_target_distance}m'
+                )
+                self.backup_phase = 2
+                self.phase_start_time = time.time()
+            else:
+                # Continue reversing
+                cmd = Twist()
+                cmd.linear.x = -backup_speed
+                cmd.angular.z = 0.0
+                self.cmd_vel_pub.publish(cmd)
+
+        # Phase 2: Rotate 90 degrees
+        elif hasattr(self, 'backup_phase') and self.backup_phase == 2:
+            # Set target angle on first iteration of Phase 2
+            if not hasattr(self, 'backup_target_yaw') and self.robot_orientation:
+                current_yaw = self.get_yaw_from_quaternion(self.robot_orientation)
+                self.backup_target_yaw = self.normalize_angle(current_yaw + math.pi / 2)  # +90 degrees
+                self.get_logger().info(
+                    f'Phase 2: Rotating 90° (from {math.degrees(current_yaw):.1f}° to {math.degrees(self.backup_target_yaw):.1f}°)'
+                )
+
+            phase_time = time.time() - self.phase_start_time
+
+            # Calculate current rotation progress
+            if self.robot_orientation and hasattr(self, 'backup_target_yaw'):
+                current_yaw = self.get_yaw_from_quaternion(self.robot_orientation)
+                angle_diff = self.normalize_angle(self.backup_target_yaw - current_yaw)
+            else:
+                angle_diff = math.pi / 2  # Default to 90 degrees remaining
+
+            # Check if rotation complete or timeout
+            if abs(angle_diff) < rotation_tolerance:
+                self.get_logger().info(
+                    f'Phase 2 complete. Rotated to {math.degrees(current_yaw):.1f}° in {phase_time:.1f}s'
+                )
+                self.backup_phase = 3  # Move to completion phase
+            elif phase_time > max_rotation_time:
+                self.get_logger().warn(
+                    f'Phase 2 timeout after {phase_time:.1f}s. Angle remaining: {math.degrees(angle_diff):.1f}°'
+                )
+                self.backup_phase = 3  # Move to completion phase
+            else:
+                # Continue rotating
+                cmd = Twist()
+                cmd.linear.x = 0.0
+                cmd.angular.z = rotation_speed if angle_diff > 0 else -rotation_speed
+                self.cmd_vel_pub.publish(cmd)
+
+        # Phase 3: Complete and transition
+        elif hasattr(self, 'backup_phase') and self.backup_phase == 3:
             # Phase 3: Stop the robot completely
             cmd = Twist()
             cmd.linear.x = 0.0
@@ -1114,12 +1153,18 @@ class AutonomousFirefighter(Node):
                 self.current_goal_handle.cancel_goal_async()
                 self.current_goal_handle = None
 
-            # Clean up backup tracking variable
+            # Clean up backup tracking variables
             if hasattr(self, 'backup_start_pos'):
                 delattr(self, 'backup_start_pos')
+            if hasattr(self, 'backup_target_yaw'):
+                delattr(self, 'backup_target_yaw')
+            if hasattr(self, 'backup_phase'):
+                delattr(self, 'backup_phase')
+            if hasattr(self, 'phase_start_time'):
+                delattr(self, 'phase_start_time')
 
             self.get_logger().info(
-                f'Backup complete (7.5m back + rotation). Forcing Nav2 replan (attempt {self.backup_attempts}/{self.max_backup_attempts})...'
+                f'Backup complete (distance + rotation). Forcing Nav2 replan (attempt {self.backup_attempts}/{self.max_backup_attempts})...'
             )
 
             # Return to navigating state which will send fresh goal and trigger replan
@@ -1484,6 +1529,23 @@ class AutonomousFirefighter(Node):
         battery_msg = Float32()
         battery_msg.data = self.battery_level
         self.battery_pub.publish(battery_msg)
+
+    def publish_extinguished_fires(self):
+        """Publish list of extinguished fire positions for GUI display"""
+        msg = PoseArray()
+        msg.header.stamp = self.get_clock().now().to_msg()
+        msg.header.frame_id = 'map'
+
+        # Convert extinguished_fires list to PoseArray
+        for fire_pos in self.extinguished_fires:
+            pose = Pose()
+            pose.position.x = fire_pos[0]
+            pose.position.y = fire_pos[1]
+            pose.position.z = fire_pos[2]
+            pose.orientation.w = 1.0
+            msg.poses.append(pose)
+
+        self.extinguished_fires_pub.publish(msg)
 
     def publish_initial_inactive_status(self):
         """Publish a one-time inactive status to align GUI on startup"""

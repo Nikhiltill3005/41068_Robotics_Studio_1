@@ -36,8 +36,8 @@ def generate_launch_description():
 
     stuck_timeout_arg = DeclareLaunchArgument(
         'stuck_timeout',
-        default_value='8.0',
-        description='Seconds stuck before giving up (seconds)'
+        default_value='3.0',
+        description='Seconds stuck before triggering backup (seconds)'
     )
 
     stuck_velocity_threshold_arg = DeclareLaunchArgument(
