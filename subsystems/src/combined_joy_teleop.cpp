@@ -14,7 +14,8 @@ class CombinedJoyTeleop : public rclcpp::Node {
 public:
     CombinedJoyTeleop() : rclcpp::Node("combined_joy_teleop"),
                           active_vehicle_(ActiveVehicle::Husky),
-                          prev_toggle_pressed_(false) {
+                          prev_toggle_pressed_(false),
+                          control_enabled_(false) {
         // Common parameters
         this->declare_parameter<int>("enable_button", 4);       // LB
         this->declare_parameter<int>("turbo_button", 5);        // RB
@@ -137,6 +138,7 @@ private:
 
         // Bumper-based selection and enable: RB selects Husky, LB selects Drone.
         if (rb_pressed || lb_pressed) {
+            control_enabled_ = true;
             ActiveVehicle prev = active_vehicle_;
             if (rb_pressed) {
                 active_vehicle_ = ActiveVehicle::Husky;  // RB overrides if both pressed
@@ -150,20 +152,12 @@ private:
                 report_active();
             }
         } else {
-            // Neither bumper held: disable motion and stop active vehicle
-            if (active_vehicle_ == ActiveVehicle::Husky) {
-                last_cmd_husky_ = geometry_msgs::msg::Twist();
-                publish_status("Hold RB (Husky) or LB (Drone) to enable");
-            } else {
-                // For drone, apply hover thrust to prevent falling if enabled
-                last_cmd_drone_ = geometry_msgs::msg::Twist();
-                if (drone_hover_when_disabled_) {
-                    last_cmd_drone_.linear.z = drone_hover_linear_z_;
-                    publish_status("Drone: Hovering (Hold LB to control, RB for Husky)");
-                } else {
-                    publish_status("Hold RB (Husky) or LB (Drone) to enable");
-                }
-            }
+            // Neither bumper held: disable motion and do not publish twists
+            control_enabled_ = false;
+            // Optionally reset last commands to zero (won't be published while disabled)
+            last_cmd_husky_ = geometry_msgs::msg::Twist();
+            last_cmd_drone_ = geometry_msgs::msg::Twist();
+            publish_status("Hold RB (Husky) or LB (Drone) to enable");
             return;
         }
 
@@ -206,20 +200,15 @@ private:
     }
 
     void publish_commands() {
-        // Publish commands for active vehicle at 20 Hz
+        // Do not publish anything if control is disabled (no bumpers pressed)
+        if (!control_enabled_) {
+            return;
+        }
+        // Publish commands only for the active vehicle while enabled
         if (active_vehicle_ == ActiveVehicle::Husky) {
             husky_cmd_vel_pub_->publish(last_cmd_husky_);
-            // Send zero to drone to ensure it stops if we switched from drone
-            geometry_msgs::msg::Twist zero_cmd;
-            if (drone_hover_when_disabled_) {
-                zero_cmd.linear.z = drone_hover_linear_z_;
-            }
-            drone_cmd_vel_pub_->publish(zero_cmd);
         } else {
             drone_cmd_vel_pub_->publish(last_cmd_drone_);
-            // Send zero to husky to ensure it stops if we switched from husky
-            geometry_msgs::msg::Twist zero_cmd;
-            husky_cmd_vel_pub_->publish(zero_cmd);
         }
     }
 
@@ -290,6 +279,9 @@ private:
 
     std::string husky_cmd_vel_topic_;
     std::string drone_cmd_vel_topic_;
+
+    // Control state
+    bool control_enabled_;
 };
 
 int main(int argc, char **argv) {
@@ -299,5 +291,4 @@ int main(int argc, char **argv) {
     rclcpp::shutdown();
     return 0;
 }
-
 

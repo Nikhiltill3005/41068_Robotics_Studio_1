@@ -94,7 +94,7 @@ class SteamDeckGui(Node):
         self.camera_enabled = {k: True for k in self.camera_queues.keys()}
         # Increased throttling for network bandwidth optimization (process every 4th frame instead of every 2nd)
         # This reduces bandwidth by ~50% which is critical for travel router connections
-        self._throttle_n = 4
+        self._throttle_n = 1
         self._counters = {k: 0 for k in self.camera_queues.keys()}
 
         # positions and path info
