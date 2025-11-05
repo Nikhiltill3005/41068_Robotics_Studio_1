@@ -264,6 +264,21 @@ def generate_launch_description():
     )
     ld.add_action(drone_ir_compress)
 
+    # Fire scan debug image compression (for Steam Deck video streaming)
+    # This is critical for network bandwidth over travel routers
+    fire_scan_debug_compress = Node(
+        package='image_transport',
+        executable='republish',
+        name='fire_scan_debug_compress',
+        arguments=['raw', 'compressed'],
+        remappings=[
+            ('in', '/drone/fire_scan/debug_image'),
+            ('out/compressed', '/drone/fire_scan/debug_image/compressed')
+        ],
+        parameters=[{'use_sim_time': use_sim_time}]
+    )
+    ld.add_action(fire_scan_debug_compress)
+
     return ld
 
 
