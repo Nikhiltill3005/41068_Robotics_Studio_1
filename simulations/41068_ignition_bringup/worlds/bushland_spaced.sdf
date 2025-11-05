@@ -298,8 +298,6 @@
       <pose>-1.2 -5.8 0.18 0 0.05 5.67</pose>
       <static>true</static>
     </include>
-
-    <!-- Density increase - 18 additional trees for 1.5x density -->
     <include>
       <uri>model://pine_tree</uri>
       <name>pine_18</name>
@@ -436,61 +434,7 @@
       <static>true</static>
     </include>
 
-    <include>
-      <uri>model://fire</uri>
-      <name>test_fire5</name>
-      <pose>-7.4 -14.2 0 0 0.05 0.78</pose>
-      <static>true</static>
-    </include>
 
-    <include>
-      <uri>model://fire</uri>
-      <name>test_fire6</name>
-      <pose>3.1 8.9 0 0 0.05 2.52</pose>
-      <static>true</static>
-    </include>
-
-    <include>
-      <uri>model://fire</uri>
-      <name>test_fire7</name>
-      <pose>-0.6 -23.0 0 0 0.05 2.10</pose>
-      <static>true</static>
-    </include>
-
-    <include>
-      <uri>model://fire</uri>
-      <name>test_fire8</name>
-      <pose>-0.5 -7.8 0 0 0.05 0.57</pose>
-      <static>true</static>
-    </include>
-
-    <include>
-      <uri>model://fire</uri>
-      <name>test_fire9</name>
-      <pose>16.5 2.7 0 0 0.05 5.12</pose>
-      <static>true</static>
-    </include>
-
-    <include>
-      <uri>model://fire</uri>
-      <name>test_fire10</name>
-      <pose>20.9 20.6 0 0 0.05 1.99</pose>
-      <static>true</static>
-    </include>
-
-    <include>
-      <uri>model://fire</uri>
-      <name>test_fire11</name>
-      <pose>1.0 -22.0 0 0 0.05 1.56</pose>
-      <static>true</static>
-    </include>
-
-    <include>
-      <uri>model://fire</uri>
-      <name>test_fire12</name>
-      <pose>-0.5 -5.3 0 0 0.05 6.23</pose>
-      <static>true</static>
-    </include>
     <!-- Human -->
     <include>
       <uri>model://MaleVisitorOnPhone</uri>
