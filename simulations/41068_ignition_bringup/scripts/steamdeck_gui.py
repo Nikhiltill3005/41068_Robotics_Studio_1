@@ -120,7 +120,7 @@ class SteamDeckGui(Node):
         
         # Track extinguished fires to remove from map
         self.extinguished_fire_positions = []
-        self.extinguish_threshold = 2.0  # Distance threshold to consider a fire extinguished
+        self.extinguish_threshold = 0.5  # Distance threshold to match fires (same as firefighter node)
 
         # cache for fire list UI to avoid flashing
         self._fire_list_signature = None
@@ -213,6 +213,9 @@ class SteamDeckGui(Node):
 
         # fire positions
         self.create_subscription(PoseArray, self.topics['fires'], self._on_fires, 10)
+
+        # extinguished fire positions (from firefighter node)
+        self.create_subscription(PoseArray, '/firefighter/extinguished_fires', self._on_extinguished_fires, 10)
 
         # battery/state topics (from status_steamdeck)
         self.create_subscription(ROSString, '/firefighter/status_steamdeck', self._on_firefighter_status_string, 10)
@@ -846,6 +849,14 @@ class SteamDeckGui(Node):
         # This message is now redundant since we get fire info from status topic
         self.update_status_panel()
 
+    def _on_extinguished_fires(self, msg: PoseArray):
+        """Callback for extinguished fire positions from firefighter node"""
+        extinguished = []
+        for p in msg.poses:
+            extinguished.append((p.position.x, p.position.y))
+        self.extinguished_fire_positions = extinguished
+        self.get_logger().info(f'Received {len(extinguished)} extinguished fire positions from firefighter')
+
     def _on_firefighter_status_string(self, msg: ROSString):
         """
         Parse firefighter status message format:
@@ -880,22 +891,11 @@ class SteamDeckGui(Node):
                     self.log(f"Fires detected updated: {self.fires_detected}")
                     self.prev_fires_detected = self.fires_detected
                 
-                # Log when fires extinguished and mark fire position as extinguished
+                # Log when fires extinguished
+                # Note: Extinguished fire positions are now received directly from firefighter node
+                # via the /firefighter/extinguished_fires topic (handled in _on_extinguished_fires callback)
                 if self.fires_extinguished > self.prev_fires_extinguished:
                     self.log(f"Fire extinguished! Total put out: {self.fires_extinguished}")
-                    # Find the nearest fire to husky position and mark it as extinguished
-                    if self.positions.get('husky') and self.fire_positions:
-                        husky_pos = self.positions['husky']
-                        nearest_fire = None
-                        nearest_dist = float('inf')
-                        for fire in self.fire_positions:
-                            dist = math.hypot(fire[0] - husky_pos[0], fire[1] - husky_pos[1])
-                            if dist < nearest_dist and dist < self.extinguish_threshold:
-                                nearest_dist = dist
-                                nearest_fire = fire
-                        if nearest_fire and nearest_fire not in self.extinguished_fire_positions:
-                            self.extinguished_fire_positions.append(nearest_fire)
-                            self.log(f"Fire at ({nearest_fire[0]:.1f}, {nearest_fire[1]:.1f}) removed from map")
                     self.prev_fires_extinguished = self.fires_extinguished
                 
                 # Log battery milestones (every 10%) and warnings
@@ -1059,13 +1059,15 @@ class SteamDeckGui(Node):
                 self.ax.text(x, y + 0.7, f"D({x:.1f},{y:.1f})", fontsize=8, ha='center')
 
             # fires (filter out extinguished ones)
+            # Extinguished fire positions are received directly from firefighter node
+            # via /firefighter/extinguished_fires topic with exact coordinates
             active_fires = []
             if self.fire_positions:
-                # Filter out extinguished fires
+                # Filter out extinguished fires by matching with exact positions
                 for fire in self.fire_positions:
                     is_extinguished = False
                     for ext_fire in self.extinguished_fire_positions:
-                        # Check if this fire matches an extinguished one (within configured threshold)
+                        # Match fires within 0.5m threshold (same as firefighter uses)
                         dist = math.hypot(fire[0] - ext_fire[0], fire[1] - ext_fire[1])
                         if dist < self.extinguish_threshold:
                             is_extinguished = True
