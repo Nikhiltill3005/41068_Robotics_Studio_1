@@ -305,16 +305,18 @@ class SteamDeckGui(Node):
         # Control buttons in the middle
         control_frame = tk.Frame(top, bg=BG)
         control_frame.pack(side=tk.LEFT, padx=20)
-        
-        self.mode_btn = tk.Button(control_frame, text="Switch to MANUAL", bg="#0078d7", fg="white",
-                                font=("Segoe UI", 9, "bold"), relief="flat", padx=8, pady=4,
-                                command=self.toggle_mode)
-        self.mode_btn.pack(side=tk.LEFT, padx=2)
 
-        stop_btn = tk.Button(control_frame, text="E-STOP", bg="#e81123", fg="white",
-                            font=("Segoe UI", 9, "bold"), relief="flat", padx=8, pady=4,
-                            command=lambda: self.log("EMERGENCY STOP ACTIVATED!"))
-        stop_btn.pack(side=tk.LEFT, padx=2)
+        # REMOVED: Switch to Manual button
+        # self.mode_btn = tk.Button(control_frame, text="Switch to MANUAL", bg="#0078d7", fg="white",
+        #                         font=("Segoe UI", 9, "bold"), relief="flat", padx=8, pady=4,
+        #                         command=self.toggle_mode)
+        # self.mode_btn.pack(side=tk.LEFT, padx=2)
+
+        # REMOVED: E-STOP button
+        # stop_btn = tk.Button(control_frame, text="E-STOP", bg="#e81123", fg="white",
+        #                     font=("Segoe UI", 9, "bold"), relief="flat", padx=8, pady=4,
+        #                     command=lambda: self.log("EMERGENCY STOP ACTIVATED!"))
+        # stop_btn.pack(side=tk.LEFT, padx=2)
 
         self.teleop_button = tk.Button(control_frame, text='Teleop Off', bg='#555555', fg='white',
                                     font=('Segoe UI', 9, 'bold'), relief='flat', padx=10, pady=4, state='disabled')
