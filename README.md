@@ -1,6 +1,6 @@
 # 41068_Robotics_Studio_1
 Codebase for Robotic Studio 1 Project
-This was a robust scalable robotics concept to enhance safety and operational efficency for frontline agencies such as the Rural Fire Service, and NSW National Parks & Wildfire Service. =
+This was a robust scalable robotics concept to enhance safety and operational efficency for frontline agencies such as the Rural Fire Service, and NSW National Parks & Wildfire Service.
 
  
 ## How it works
