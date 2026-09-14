@@ -8,10 +8,14 @@ This was a robust scalable robotics concept to enhance safety and operational ef
 
 The full workflow from fire detection to UGV deployment and suppression is simulated with Gazebo Ignition and developed entirely in ROS 2, enabling repeatable testing and rapid iteration.
 
-    *UAV: Autonomous aerial sweep, RGB + IR inputs, fire localisation & bounding.
-    *UGV: LiDAR SLAM, Nav2‑based navigation, autonomous fire approach & extinguishing behaviour.
-    *GUI: Central mission control tying together perception, planning, telemetry, and teleoperation.
-    
+UAV: Autonomous aerial sweep, RGB + IR inputs, fire localisation & bounding.
+
+UGV: LiDAR SLAM, Nav2‑based navigation, autonomous fire approach & extinguishing behaviour.
+
+GUI: Central mission control tying together perception, planning, telemetry, and teleoperation.
+
+
+
 ## Demo
  
 ![SpotiPi in action](img/steam_deck_integration.png)
