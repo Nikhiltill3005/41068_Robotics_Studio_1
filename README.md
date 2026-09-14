@@ -16,7 +16,7 @@ GUI: Central mission control tying together perception, planning, telemetry, and
 
 
 
-## Demo
+## Images from our project
  
 ![SpotiPi in action](img/steam_deck_integration.png)
  
