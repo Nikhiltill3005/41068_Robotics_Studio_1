@@ -14,11 +14,11 @@ The full workflow from fire detection to UGV deployment and suppression is simul
     
 ## Demo
  
-![SpotiPi in action](pablo/UR3.gif)
+![SpotiPi in action](img/steam_deck_integration.png)
  
 ## Gallery
  
 | | |
 |---|---|
-| ![Photo 1](pablo/RS2_GUI.jpeg) | ![Photo 2](pablo/RS2-TECHFEST.jpeg) |
+| ![Photo 1](img/RS2_GUI.jpeg) | ![Photo 2](pablo/RS2-TECHFEST.jpeg) | 
  
