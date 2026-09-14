@@ -20,5 +20,5 @@ The full workflow from fire detection to UGV deployment and suppression is simul
  
 | | |
 |---|---|
-| ![Photo 1](img/RS2_GUI.jpeg) | ![Photo 2](pablo/RS2-TECHFEST.jpeg) | 
+| ![Photo 1](img/Firemap.png) | ![Photo 2](img/GUI.png) | 
  
